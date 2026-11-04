@@ -36,7 +36,6 @@ def get_model(
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def load_checkpoint(
-    model: nn.Module,
     checkpoint_path: str,
     device: str,
     hf_repo_id: Optional[str] = None,
@@ -55,11 +54,18 @@ def load_checkpoint(
     if not ckpt_file.exists():
         raise FileNotFoundError(f"Checkpoint file does not exist: {checkpoint_path}. Ensure models are trained or pulled from Hugging Face.")
 
-    state_dict = torch.load(ckpt_file, map_location=device, weights_only=True)
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()
-    return model
+    try:
+        raw = torch.load(ckpt_file, map_location=device, weights_only=True)
+    except Exception:
+        raw = torch.load(ckpt_file, map_location=device, weights_only=False)
+
+    config = {}
+    if isinstance(raw, dict) and "model_state_dict" in raw:
+        state_dict = raw["model_state_dict"]
+        config = raw.get("config", {})
+    else:
+        state_dict = raw
+    return state_dict, config
 
 def run_evaluation(
     model_type: str = "hybrid",
@@ -87,7 +93,19 @@ def run_evaluation(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if hf_repo_id is None:
-        hf_repo_id = os.environ.get("HF_REPO_ID")
+        hf_repo_id = os.environ.get("HF_REPO_ID", "AnishRacherla/anlp-a3-models")
+
+    state_dict, config = load_checkpoint(
+        checkpoint_path=checkpoint_path,
+        device=device,
+        hf_repo_id=hf_repo_id,
+        hf_filename=hf_filename,
+    )
+
+    d_model = config.get("d_model", d_model)
+    n_layers = config.get("n_layers", n_layers)
+    max_seq_len = config.get("max_seq_len", max_seq_len)
+    model_type = config.get("model_type", model_type)
 
     tokenizer = CharTokenizer()
     vocab_size = tokenizer.vocab_size
@@ -100,13 +118,9 @@ def run_evaluation(
         n_layers=n_layers,
         max_seq_len=max_seq_len,
     )
-    model = load_checkpoint(
-        model=model,
-        checkpoint_path=checkpoint_path,
-        device=device,
-        hf_repo_id=hf_repo_id,
-        hf_filename=hf_filename,
-    )
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
 
     if heldout:
         target_cipher = Path(heldout_path)
@@ -150,9 +164,15 @@ def run_evaluation(
     hypotheses = []
 
     with open(out_filename, "w", encoding="utf-8") as f_out:
-        for inputs, labels, ids, raw_ciphers, raw_plains in tqdm(eval_loader, desc=f"Evaluating {model_type}"):
+        for inputs, labels, ids, raw_ciphers, raw_plains, lengths in tqdm(eval_loader, desc=f"Evaluating {model_type}"):
             inputs = inputs.to(device)
-            batch_preds = model.predict(inputs)
+            batch_preds = model.predict(inputs, lengths=lengths)
+            hypotheses.extend(batch_preds)
+            if raw_plains and raw_plains[0]:
+                references.extend(raw_plains)
+
+            for id_val, hyp in zip(ids, batch_preds):
+                f_out.write(json.dumps({"id": id_val, "text": hyp}, ensure_ascii=False) + "\n")
             hypotheses.extend(batch_preds)
             if raw_plains and raw_plains[0]:
                 references.extend(raw_plains)
@@ -198,7 +218,7 @@ def parse_args():
     p.add_argument("--roll-number", type=str, default="2023XXXX")
     p.add_argument("--output-dir", type=str, default="output/part1")
     p.add_argument("--results-dir", type=str, default="results/part1")
-    p.add_argument("--hf-repo-id", type=str, default=None)
+    p.add_argument("--hf-repo-id", type=str, default="AnishRacherla/anlp-a3-models")
     p.add_argument("--hf-filename", type=str, default=None)
     p.add_argument("--d-model", type=int, default=192)
     p.add_argument("--n-layers", type=int, default=8)

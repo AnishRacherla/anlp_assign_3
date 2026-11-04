@@ -172,6 +172,10 @@ def train(
                 b, t, v = logits.shape
                 loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=PAD_TARGET_ID)
 
+            cur_lr = lr * lr_schedule(step, warmup_steps, total_steps)
+            for pg in optimizer.param_groups:
+                pg["lr"] = cur_lr
+
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -179,10 +183,6 @@ def train(
             scaler.update()
 
             step += 1
-            cur_lr = lr * lr_schedule(step, warmup_steps, total_steps)
-            for pg in optimizer.param_groups:
-                pg["lr"] = cur_lr
-
             pbar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{cur_lr:.2e}")
 
             if use_wandb and step % 50 == 0:
@@ -196,7 +196,18 @@ def train(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), best_ckpt_path)
+            ckpt_data = {
+                "model_state_dict": model.state_dict(),
+                "config": {
+                    "model_type": model_type,
+                    "vocab_size": vocab_size,
+                    "num_classes": NUM_TARGET_CLASSES,
+                    "d_model": d_model,
+                    "n_layers": n_layers,
+                    "max_seq_len": max_seq_len,
+                },
+            }
+            torch.save(ckpt_data, best_ckpt_path)
             print(f"Saved best model to {best_ckpt_path}")
 
     if push_hf and hf_repo_id and best_ckpt_path.exists():

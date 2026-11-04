@@ -2,6 +2,7 @@
 set -e
 
 ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
+HF_REPO_ID="${HF_REPO_ID:-AnishRacherla/anlp-a3-models}"
 
 EXTRA_ARGS=()
 if [ -n "$HF_REPO_ID" ]; then

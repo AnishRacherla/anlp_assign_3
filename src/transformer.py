@@ -150,12 +150,27 @@ class Transformer(nn.Module):
         return logits
 
     @torch.no_grad()
-    def predict(self, input_ids: torch.Tensor) -> List[str]:
+    def predict(self, input_ids: torch.Tensor, lengths: Optional[List[int]] = None) -> List[str]:
         self.eval()
-        logits = self.forward(input_ids)
+        b, t = input_ids.shape
+        if t <= self.max_seq_len:
+            logits = self.forward(input_ids)
+        else:
+            stride = max(1, self.max_seq_len - 128)
+            logits_accum = torch.zeros(b, t, self.num_classes, device=input_ids.device)
+            counts = torch.zeros(b, t, 1, device=input_ids.device)
+            for start in range(0, t, stride):
+                end = min(start + self.max_seq_len, t)
+                sub_logits = self.forward(input_ids[:, start:end])
+                logits_accum[:, start:end] += sub_logits
+                counts[:, start:end] += 1.0
+                if end == t:
+                    break
+            logits = logits_accum / counts.clamp(min=1.0)
         pred_ids = logits.argmax(dim=-1).cpu().tolist()
         results = []
-        for row in pred_ids:
-            clean_row = [tid for tid in row[1:] if tid != NOISE_TARGET_ID]
+        for i, row in enumerate(pred_ids):
+            limit = lengths[i] if lengths is not None else len(row)
+            clean_row = [tid for tid in row[1:limit] if tid != NOISE_TARGET_ID]
             results.append(decode_target_sequence(clean_row))
         return results

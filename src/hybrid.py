@@ -61,12 +61,13 @@ class HybridMambaDeltaNet(nn.Module):
         return logits
 
     @torch.no_grad()
-    def predict(self, input_ids: torch.Tensor) -> List[str]:
+    def predict(self, input_ids: torch.Tensor, lengths: Optional[List[int]] = None) -> List[str]:
         self.eval()
         logits = self.forward(input_ids)
         pred_ids = logits.argmax(dim=-1).cpu().tolist()
         results = []
-        for row in pred_ids:
-            clean_row = [tid for tid in row[1:] if tid != NOISE_TARGET_ID]
+        for i, row in enumerate(pred_ids):
+            limit = lengths[i] if lengths is not None else len(row)
+            clean_row = [tid for tid in row[1:limit] if tid != NOISE_TARGET_ID]
             results.append(decode_target_sequence(clean_row))
         return results

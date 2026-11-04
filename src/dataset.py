@@ -53,7 +53,11 @@ class CipherDataset(Dataset):
                         break
             assert len(self.samples) == len(targets)
             for s, t in zip(self.samples, targets):
-                s["text"] = t["text"]
+                c_str = s.get("ciphertext", "")
+                p_str = t.get("text", "")
+                c_clean_len = sum(1 for ch in c_str if ch not in NOISE_CHARS)
+                assert c_clean_len == len(p_str), f"Length mismatch: {c_clean_len} != {len(p_str)}"
+                s["text"] = p_str
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -88,8 +92,7 @@ class CipherDataset(Dataset):
         input_ids = [BOS_ID] + cipher_ids
         labels = [PAD_TARGET_ID] + target_ids
 
-        seq_len = len(input_ids)
-        if self.max_len and seq_len > self.max_len:
+        if self.is_train and self.max_len and len(input_ids) > self.max_len:
             input_ids = input_ids[: self.max_len]
             labels = labels[: self.max_len]
 
@@ -128,6 +131,7 @@ def collate_eval_batch(batch: List[dict]):
     ids = [x["id"] for x in batch]
     raw_ciphers = [x["raw_cipher"] for x in batch]
     raw_plains = [x.get("raw_plain", "") for x in batch]
+    lengths = [len(x["input_ids"]) for x in batch]
 
     labels = None
     if "labels" in batch[0]:
@@ -136,7 +140,7 @@ def collate_eval_batch(batch: List[dict]):
             lbl = item["labels"]
             labels[i, : len(lbl)] = lbl
 
-    return inputs, labels, ids, raw_ciphers, raw_plains
+    return inputs, labels, ids, raw_ciphers, raw_plains, lengths
 
 def get_dataloader(
     cipher_path: Union[str, Path],

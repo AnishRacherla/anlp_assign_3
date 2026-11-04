@@ -60,15 +60,15 @@ def word_accuracy_aligned(ref: str, hyp: str) -> float:
     return max(0.0, 1.0 - (w_lev / max_len))
 
 def sequence_precision_recall_f1(ref: str, hyp: str) -> Tuple[float, float, float]:
-    if not ref and not hyp:
+    l_ref, l_hyp = len(ref), len(hyp)
+    if l_ref == 0 and l_hyp == 0:
         return 1.0, 1.0, 1.0
-    if not ref or not hyp:
+    if l_ref == 0 or l_hyp == 0:
         return 0.0, 0.0, 0.0
-    ref_chars = Counter(ref)
-    hyp_chars = Counter(hyp)
-    tp = sum(min(count, hyp_chars[ch]) for ch, count in ref_chars.items())
-    precision = tp / len(hyp) if len(hyp) > 0 else 0.0
-    recall = tp / len(ref) if len(ref) > 0 else 0.0
+    lev = compute_levenshtein(ref, hyp)
+    matches = max(0.0, (l_ref + l_hyp - lev) / 2.0)
+    precision = matches / l_hyp
+    recall = matches / l_ref
     f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     return precision, recall, f1
 
