@@ -1,84 +1,52 @@
-# Architectural Design and Hypothesis: Mamba-DeltaNet Hybrid for Neural Decryption
+# Design and Hypothesis: Interleaved Mamba-DeltaNet Hybrid for Cipher Decryption
 
-## 1. Overview and Problem Context
-Neural cipher decryption presents a twofold challenge:
-1. **Dynamic Noise and Local Entropy:** Encrypted transmissions often contain non-semantic perturbations, keystream variations, and token-level noise requiring selective filtering and adaptive forgetting.
-2. **Associative Memory and Long-Range State Tracking:** Decrypting continuous sequences requires recalling previously observed cipher-plaintext alignments, maintaining a global keystream state, and retrieving associative substitutions across extended sequence contexts.
+## 1. Task Structure (from data analysis, before any model training)
 
-Standard attention mechanisms exhibit $\mathcal{O}(L^2)$ computational complexity, while pure linear recurrent models often struggle with selective filtering or associative recall. To address both challenges efficiently in subquadratic time ($\mathcal{O}(L)$), we propose a hybrid architecture combining **Selective State Spaces (Mamba)** and **Delta-Rule Linear Attention (DeltaNet)**.
+- Plaintext alphabet: 27 symbols (`a-z`, space). Ciphertext alphabet: 81 symbols, of which 18 punctuation symbols (`!'+,-./:;<=>?[]_{}`) are noise.
+- In train and validation, `len(cipher) - len(plain)` equals the number of noise symbols in the cipher for every sample. Removing them gives a 1-to-1 character alignment with the plaintext.
+- Consequence: decryption is a per-position tagging problem over the raw cipher stream, not free-form generation. Each real cipher symbol maps to one plaintext symbol, and noise symbols map to a `<noise>` class that is dropped at output.
+- Noise symbols are inserted at random intervals, so the absolute index of a symbol in the raw stream is not its index in the plaintext. A model must discount noise to know where it is in the real stream.
 
----
+## 2. Formulation Shared by All Four Models
 
-## 2. Proposed Architecture: Interleaved Mamba-DeltaNet Stack
+- Input: `[BOS] c_1 ... c_L` (raw cipher including noise). Target at each position: the plaintext character, or `<noise>`. Loss is cross-entropy over all positions; padding is ignored.
+- Output: predictions at non-noise positions in order, which are already aligned with the plaintext. No autoregressive decoding, so inference is a single forward pass.
+- All models are causal, so recurrent models keep their intended form and the Transformer uses the same mask.
+- Matched budget: the same embedding, depth, hidden width target and MLP size, with parameter counts reported and kept within about 10% of each other. Dropout is 0 for all.
+- Training uses random crops of the sequences. Inference runs on full sequences for the recurrent models and with overlapping windows for the Transformer.
 
-### 2.1 Layer Ordering
-The hybrid backbone is configured as an **interleaved sequential stack** of alternating Mamba and DeltaNet layers:
+## 3. Proposed Architecture
 
 ```
-[Input Embedding]
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Layer 1: Mamba Block            │  <-- Local Context & Selective Filtering
-└─────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Layer 2: DeltaNet Block         │  <-- Associative Key-Value Memory Update
-└─────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Layer 3: Mamba Block            │  <-- Dynamic State Routing & Gating
-└─────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Layer 4: DeltaNet Block         │  <-- Multi-Step Associative Retrieval
-└─────────────────────────────────┘
-       │
-      ... (Repeated for N/2 stages)
-       │
-       ▼
-[Final Normalization (RMSNorm)]
-       │
-       ▼
-[Linear Language Model Head]
+[Embedding]
+   -> (Mamba layer -> DeltaNet layer) x (N/2)
+   -> RMSNorm -> Linear head (28-way: 27 plaintext + noise)
 ```
 
-Each block maintains pre-normalization (RMSNorm / LayerNorm) and residual connections ($x \leftarrow x + \text{SubLayer}(\text{Norm}(x))$).
+- Every layer is pre-norm with a residual connection: `x <- x + Layer(RMSNorm(x))`.
+- Mamba layer: input projection, depthwise causal conv (k=4), selective SSM with input-dependent `Delta`, `B`, `C`, SiLU gate, output projection, followed by a gated MLP so the two layer types have the same feed-forward capacity.
+- DeltaNet layer: short causal conv with SiLU on q, k, v, L2-normalised q and k, `beta_t = sigmoid(.)`, delta-rule state `S_t = S_{t-1} + beta_t (v_t - S_{t-1} k_t) k_t^T`, `o_t = S_t q_t`, then a gated MLP.
+- Mamba comes first in each pair, and the first layer sees the raw noisy embeddings.
 
----
+## 4. Hypotheses
 
-## 3. Theoretical Rationale and Hypothesis
+**H1 (Mamba first filters noise).** The selection mechanism can set `Delta_t` near 0 at noise symbols so that the state is not advanced by them. This should let the early Mamba layer maintain a noise-free running representation of the real stream. DeltaNet, which has no per-channel decay but does have a write strength `beta_t`, can also suppress writes, but it has no continuous-time decay to carry state through unchanged.
 
-### 3.1 Complementary Memory Paradigms
-* **Mamba (Selective Continuous State Space):**
-  Mamba operates via input-dependent discretization:
-  $$\Delta_t = \text{softplus}(\text{Linear}(x_t)), \quad \bar{A}_t = \exp(\Delta_t A), \quad \bar{B}_t = \Delta_t B_t$$
-  $$h_t = \bar{A}_t h_{t-1} + \bar{B}_t x_t, \quad y_t = C_t h_t$$
-  The dynamic step size $\Delta_t$ allows Mamba to modulate how much information enters or decays from its hidden state $h_t \in \mathbb{R}^{D \times N}$. When encountering irrelevant noise tokens or keystream artifacts, Mamba can scale down $\Delta_t \to 0$, effectively preserving prior state without corruption. Furthermore, its initial 1D causal convolution captures local $n$-gram context essential for detecting short cipher patterns.
+**H2 (DeltaNet stores the cipher-to-plaintext bindings).** The delta rule overwrites the old value for a key rather than accumulating, so it suits repeated lookups of a fixed or slowly changing substitution table, and keeps the memory from saturating over long sequences.
 
-* **DeltaNet (Associative Matrix Memory with Delta Rule):**
-  DeltaNet maintains a 2D associative matrix memory $S_t \in \mathbb{R}^{d_k \times d_v}$:
-  $$S_t = S_{t-1} + \beta_t (v_t - S_{t-1} k_t) k_t^T$$
-  $$o_t = S_t q_t$$
-  Unlike plain linear attention which additively accumulates keys and values leading to capacity saturation, DeltaNet reads the existing association ($S_{t-1} k_t$), computes the prediction error $(v_t - S_{t-1} k_t)$, and updates only the residual error scaled by learning rate $\beta_t$. This provides exact associative recall and in-context key-value substitution.
+**H3 (the order Mamba, then DeltaNet, is better than the reverse or either alone).** DeltaNet's keys and values are better formed if the noise-driven position shift has already been absorbed by the preceding Mamba layer. We expect the hybrid to be at least as accurate as the better of pure Mamba and pure DeltaNet, and to degrade more slowly as the noise rate grows.
 
-### 3.2 The Interleaving Synergy
-1. **Noise Filtering Before Memory Storage (Mamba $\to$ DeltaNet):**
-   If raw, noisy tokens are directly fed into an associative memory, erroneous key-value bindings can accumulate. By placing Mamba first, the 1D causal convolution and input-dependent selection mechanism filter out local perturbations, presenting DeltaNet with denoised, contextualized token representations.
-2. **Associative Retrieval Followed by Gated Non-Linearity (DeltaNet $\to$ Mamba):**
-   DeltaNet outputs linear associations ($o_t = S_t q_t$). The subsequent Mamba block applies non-linear expansion, channel-wise SwiGLU gating, and state-space filtering, allowing the network to synthesize and verify retrieved associations before proceeding to deeper layers.
-3. **Decoupled State Representation:**
-   * Mamba tracks *temporal continuous dynamics* ($h_t \in \mathbb{R}^{D \times N}$).
-   * DeltaNet tracks *associative key-value bindings* ($S_t \in \mathbb{R}^{d_k \times d_v}$).
-   Alternating them prevents state saturation and enables the hybrid network to achieve greater expressive capacity than a homogeneous stack of either model alone at equivalent parameter counts.
+**H4 (Transformer).** With relative positions (RoPE), noise insertion perturbs distances between real symbols. If the cipher's key depends on the real-stream position, the Transformer should be the most sensitive to the noise rate, since it has no mechanism that skips noise.
 
----
+If the cipher turns out to be a position-independent substitution, H1 and H4 predict little difference in accuracy and the comparison shifts to efficiency (Section 5).
 
-## 4. Expected Empirical Outcomes
-* **Character-Level and Word-Level Accuracy:** Expected to outperform standalone DeltaNet on high-entropy segments due to Mamba's selective gating, and outperform standalone Mamba on repetitive associative patterns due to DeltaNet's delta-rule memory.
-* **Levenshtein Distance:** Expected to be lower (indicating higher sequence fidelity and fewer substitution errors) compared to both individual baselines.
-* **Computational Efficiency:** Maintains strict $\mathcal{O}(L)$ time and memory scaling with sequence length, remaining within the prescribed 10GB VRAM inference budget.
+## 5. Planned Evidence
 
+- Metrics: character accuracy, word accuracy, precision, recall, F1, Levenshtein distance, parameter count, FLOPs, all measured on the aligned output.
+- Noise-rate sweep: evaluate on inputs with extra noise inserted at rates above and below the training rate.
+- Noise-stripped input as an ablation: if H1 holds, the hybrid's gap to the others should shrink on stripped input.
+- Length extrapolation: train on short crops and evaluate on sequences up to the maximum length.
+- Layer-order ablation: Mamba then DeltaNet versus DeltaNet then Mamba, at the same parameter count.
+- Efficiency: inference throughput and peak memory against sequence length, all within the 10 GB VRAM limit.
+
+The final report will compare results against H1-H4 and state which were not supported.
