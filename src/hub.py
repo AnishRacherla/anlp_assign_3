@@ -39,8 +39,17 @@ def init_wandb(
         return None
     key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
     if key:
-        wandb.login(key=key)
-    return wandb.init(project=project, name=name, config=config, resume="allow")
+        try:
+            wandb.login(key=key, relogin=True)
+        except Exception:
+            pass
+    try:
+        return wandb.init(project=project, name=name, config=config, resume="allow")
+    except Exception:
+        try:
+            return wandb.init(project=project, name=name, config=config, mode="offline")
+        except Exception:
+            return None
 
 def push_to_hub(
     local_path: str,

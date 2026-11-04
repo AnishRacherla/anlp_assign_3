@@ -135,7 +135,7 @@ def train(
 
     use_wandb = wandb_project is not None and _HAS_WANDB
     if use_wandb:
-        init_wandb(
+        wb_run = init_wandb(
             project=wandb_project,
             name=wandb_run_name or f"{model_type}_run",
             config={
@@ -147,6 +147,7 @@ def train(
                 "batch_size": batch_size,
             },
         )
+        use_wandb = wb_run is not None
 
     is_cuda = "cuda" in str(device)
     dev_type = "cuda" if is_cuda else "cpu"
@@ -199,11 +200,14 @@ def train(
             print(f"Saved best model to {best_ckpt_path}")
 
     if push_hf and hf_repo_id and best_ckpt_path.exists():
-        push_to_hub(
-            local_path=str(best_ckpt_path),
-            repo_id=hf_repo_id,
-            filename=f"{model_type}_best.pt",
-        )
+        try:
+            push_to_hub(
+                local_path=str(best_ckpt_path),
+                repo_id=hf_repo_id,
+                filename=f"{model_type}_best.pt",
+            )
+        except Exception as e:
+            print(f"Warning: push_to_hub failed: {e}")
 
     if use_wandb:
         wandb.finish()
