@@ -7,7 +7,7 @@ set -e
 # GPU 1: Mamba -> DeltaNet
 # ==============================================================================
 
-GIT_REPO_URL="${GIT_REPO_URL:-}"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/AnishRacherla/anlp_assign_3.git}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 HF_REPO_ID="${HF_REPO_ID:-}"
 WANDB_PROJECT="${WANDB_PROJECT:-anlp-a3-part1}"
