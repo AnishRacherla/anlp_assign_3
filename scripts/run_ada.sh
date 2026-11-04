@@ -2,9 +2,9 @@
 #SBATCH --job-name=anlp_a3
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
-#SBATCH --mem=32G
+#SBATCH --mem=8G
 #SBATCH --time=04:00:00
 #SBATCH --output=logs/part1/ada_%j.out
 #SBATCH --error=logs/part1/ada_%j.err
