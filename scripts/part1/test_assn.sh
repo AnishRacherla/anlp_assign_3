@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-ROLL_NUMBER="${ROLL_NUMBER:-2023XXXX}"
+ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
 
 EXTRA_ARGS=()
 if [ -n "$HF_REPO_ID" ]; then
@@ -14,7 +14,14 @@ if [ -n "$CHECKPOINT_PATH" ]; then
     EXTRA_ARGS+=(--checkpoint-path "$CHECKPOINT_PATH")
 fi
 
-uv run python -m src.evaluate \
-    --roll-number "$ROLL_NUMBER" \
-    "${EXTRA_ARGS[@]}" \
-    "$@"
+if command -v uv >/dev/null 2>&1; then
+    uv run python -m src.evaluate \
+        --roll-number "$ROLL_NUMBER" \
+        "${EXTRA_ARGS[@]}" \
+        "$@"
+else
+    python -m src.evaluate \
+        --roll-number "$ROLL_NUMBER" \
+        "${EXTRA_ARGS[@]}" \
+        "$@"
+fi

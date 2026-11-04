@@ -47,6 +47,18 @@ if [ ! -f "data/part1/train/cipher.jsonl" ]; then
     fi
 fi
 
+export PYTHONUNBUFFERED=1
+
+# Verify dataset exists before starting
+if [ ! -f "data/part1/train/cipher.jsonl" ]; then
+    echo "========================================================================"
+    echo "ERROR: data/part1/train/cipher.jsonl does not exist!"
+    echo "Please ensure the dataset is copied into data/part1/ before running."
+    echo "Run the dataset setup cell first."
+    echo "========================================================================"
+    exit 1
+fi
+
 echo "=== Installing Dependencies ==="
 pip install --quiet torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 || true
 pip install --quiet torch-geometric wandb huggingface-hub tqdm editdistance pyyaml scipy
@@ -69,8 +81,9 @@ echo "=== Launching Dual-GPU Parallel Pipelines ==="
 # GPU 0 Pipeline: Transformer -> Hybrid
 # ------------------------------------------------------------------------------
 (
+    set -e
     echo "[GPU 0] Starting Model 1: Transformer..."
-    CUDA_VISIBLE_DEVICES=0 python -m src.train \
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.train \
         --model-type transformer \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
@@ -78,15 +91,25 @@ echo "=== Launching Dual-GPU Parallel Pipelines ==="
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
         --wandb-run-name "transformer_gpu0" \
-        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu0_transformer.log 2>&1
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu0_transformer.log 2>&1; then
+        echo "[GPU 0] ERROR: Transformer training failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_transformer.log
+        exit 1
+    fi
+
     echo "[GPU 0] Transformer training complete. Evaluating..."
-    CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
         --model-type transformer \
         --checkpoint-path models/part1/transformer_best.pt \
-        --device cuda:0 >> logs/part1/gpu0_transformer.log 2>&1
+        --device cuda:0 >> logs/part1/gpu0_transformer.log 2>&1; then
+        echo "[GPU 0] ERROR: Transformer evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_transformer.log
+        exit 1
+    fi
+    echo "[GPU 0] Transformer evaluated successfully."
 
     echo "[GPU 0] Starting Model 2: Hybrid (Mamba-DeltaNet)..."
-    CUDA_VISIBLE_DEVICES=0 python -m src.train \
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.train \
         --model-type hybrid \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
@@ -94,13 +117,22 @@ echo "=== Launching Dual-GPU Parallel Pipelines ==="
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
         --wandb-run-name "hybrid_gpu0" \
-        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu0_hybrid.log 2>&1
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu0_hybrid.log 2>&1; then
+        echo "[GPU 0] ERROR: Hybrid training failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_hybrid.log
+        exit 1
+    fi
+
     echo "[GPU 0] Hybrid training complete. Evaluating..."
-    CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
         --model-type hybrid \
         --checkpoint-path models/part1/hybrid_best.pt \
-        --device cuda:0 >> logs/part1/gpu0_hybrid.log 2>&1
-
+        --device cuda:0 >> logs/part1/gpu0_hybrid.log 2>&1; then
+        echo "[GPU 0] ERROR: Hybrid evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_hybrid.log
+        exit 1
+    fi
+    echo "[GPU 0] Hybrid evaluated successfully."
     echo "[GPU 0] All assigned models finished successfully!"
 ) &
 PID_GPU0=$!
@@ -109,8 +141,9 @@ PID_GPU0=$!
 # GPU 1 Pipeline: Mamba -> DeltaNet
 # ------------------------------------------------------------------------------
 (
+    set -e
     echo "[GPU 1] Starting Model 3: Mamba..."
-    CUDA_VISIBLE_DEVICES=1 python -m src.train \
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.train \
         --model-type mamba \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
@@ -118,15 +151,25 @@ PID_GPU0=$!
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
         --wandb-run-name "mamba_gpu1" \
-        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu1_mamba.log 2>&1
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu1_mamba.log 2>&1; then
+        echo "[GPU 1] ERROR: Mamba training failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_mamba.log
+        exit 1
+    fi
+
     echo "[GPU 1] Mamba training complete. Evaluating..."
-    CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
         --model-type mamba \
         --checkpoint-path models/part1/mamba_best.pt \
-        --device cuda:0 >> logs/part1/gpu1_mamba.log 2>&1
+        --device cuda:0 >> logs/part1/gpu1_mamba.log 2>&1; then
+        echo "[GPU 1] ERROR: Mamba evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_mamba.log
+        exit 1
+    fi
+    echo "[GPU 1] Mamba evaluated successfully."
 
     echo "[GPU 1] Starting Model 4: DeltaNet..."
-    CUDA_VISIBLE_DEVICES=1 python -m src.train \
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.train \
         --model-type deltanet \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
@@ -134,13 +177,22 @@ PID_GPU0=$!
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
         --wandb-run-name "deltanet_gpu1" \
-        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu1_deltanet.log 2>&1
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu1_deltanet.log 2>&1; then
+        echo "[GPU 1] ERROR: DeltaNet training failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_deltanet.log
+        exit 1
+    fi
+
     echo "[GPU 1] DeltaNet training complete. Evaluating..."
-    CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
         --model-type deltanet \
         --checkpoint-path models/part1/deltanet_best.pt \
-        --device cuda:0 >> logs/part1/gpu1_deltanet.log 2>&1
-
+        --device cuda:0 >> logs/part1/gpu1_deltanet.log 2>&1; then
+        echo "[GPU 1] ERROR: DeltaNet evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_deltanet.log
+        exit 1
+    fi
+    echo "[GPU 1] DeltaNet evaluated successfully."
     echo "[GPU 1] All assigned models finished successfully!"
 ) &
 PID_GPU1=$!
@@ -151,7 +203,17 @@ echo "Waiting for both pipelines to complete..."
 wait $PID_GPU0
 wait $PID_GPU1
 
+echo ""
+echo "========================================================================"
 echo "=== All 4 Models Successfully Trained and Evaluated! ==="
-echo "Results summary:"
-ls -lh results/part1/
+echo "========================================================================"
+echo ""
+echo "=== RESULTS SUMMARY (results/part1/) ==="
+for f in results/part1/*.json; do
+    if [ -f "$f" ]; then
+        echo "--- File: $f ---"
+        cat "$f"
+        echo ""
+    fi
+done
 
