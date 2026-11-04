@@ -1,0 +1,1 @@
+Optional directory to save the checkpoints. Should be gitignored. The models should be accessible on HuggingFace.

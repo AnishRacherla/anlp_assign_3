@@ -1,0 +1,60 @@
+{
+  "part_a": {
+    "mlp": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "gcn": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "sage": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "gat": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "bigcn": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    }
+  },
+  "part_b": {
+    "profile": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "spacy": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "bert": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    },
+    "content": {
+      "accuracy": null,
+      "precision": null,
+      "recall": null,
+      "f1": null
+    }
+  },
+}

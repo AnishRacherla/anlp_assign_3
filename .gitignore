@@ -1,0 +1,35 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+.uv_cache/
+
+# Environment files
+.env
+
+# Datasets (preserve .gitkeep)
+data/*
+!data/**/.gitkeep
+
+# Checkpoints and models (preserve .gitkeep)
+models/*
+!models/**/.gitkeep
+*.pt
+*.bin
+*.safetensors
+*.ckpt
+
+# Logs (preserve .gitkeep)
+logs/*
+!logs/**/.gitkeep
+wandb/
+
+# Outputs (preserve .gitkeep)
+output/*
+!output/**/.gitkeep
