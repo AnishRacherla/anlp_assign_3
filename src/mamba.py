@@ -55,21 +55,19 @@ class SelectiveSSM(nn.Module):
             x_proj_out, [self.dt_rank, self.d_state, self.d_state], dim=-1
         )
 
-        delta = F.softplus(self.dt_proj(delta_proj))
-        a = -torch.exp(self.a_log.float())
-
-        delta = delta.float().unsqueeze(-1)
-        a = a.view(1, 1, d, self.d_state)
+        delta = F.softplus(self.dt_proj(delta_proj)).float().unsqueeze(-1)
+        a_mat = -torch.exp(self.a_log.float()).view(1, d, self.d_state)
         b_bar = b_proj.float().unsqueeze(2)
-
-        delta_a = torch.exp(delta * a)
-        delta_b_u = (delta * b_bar) * u.float().unsqueeze(-1)
+        u_f = u.float().unsqueeze(-1)
         c_proj_f = c_proj.float()
 
         h = torch.zeros(b, d, self.d_state, device=u.device, dtype=torch.float32)
         ys = []
         for t in range(l):
-            h = delta_a[:, t] * h + delta_b_u[:, t]
+            d_t = delta[:, t]
+            da_t = torch.exp(d_t * a_mat)
+            dbu_t = (d_t * b_bar[:, t]) * u_f[:, t]
+            h = da_t * h + dbu_t
             y_t = torch.einsum("bdn,bn->bd", h, c_proj_f[:, t])
             ys.append(y_t)
 

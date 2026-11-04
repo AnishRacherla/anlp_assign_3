@@ -60,7 +60,7 @@ if [ ! -f "data/part1/train/cipher.jsonl" ]; then
 fi
 
 EPOCHS="${EPOCHS:-3}"
-BATCH_SIZE="${BATCH_SIZE:-32}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
 ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
 
@@ -154,3 +154,4 @@ for f in results/part1/*.json; do
         echo ""
     fi
 done
+
