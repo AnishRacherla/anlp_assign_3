@@ -64,10 +64,8 @@ BATCH_SIZE="${BATCH_SIZE:-16}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
 ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
 
-EXTRA_FLAGS=""
-if [ -n "$MAX_TRAIN_SAMPLES" ]; then
-    EXTRA_FLAGS="--max-train-samples $MAX_TRAIN_SAMPLES"
-fi
+MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-25000}"
+EXTRA_FLAGS="--max-train-samples $MAX_TRAIN_SAMPLES"
 
 # Detect number of available GPUs
 NUM_GPUS=$(nvidia-smi -L 2>/dev/null | wc -l || echo 1)

@@ -89,14 +89,7 @@ class CipherDataset(Dataset):
         labels = [PAD_TARGET_ID] + target_ids
 
         seq_len = len(input_ids)
-        if self.is_train and self.max_len and seq_len > self.max_len:
-            max_start = seq_len - self.max_len
-            start = random.randint(0, max_start)
-            input_ids = input_ids[start : start + self.max_len]
-            labels = labels[start : start + self.max_len]
-            input_ids[0] = BOS_ID
-            labels[0] = PAD_TARGET_ID
-        elif not self.is_train and self.max_len and seq_len > self.max_len:
+        if self.max_len and seq_len > self.max_len:
             input_ids = input_ids[: self.max_len]
             labels = labels[: self.max_len]
 
