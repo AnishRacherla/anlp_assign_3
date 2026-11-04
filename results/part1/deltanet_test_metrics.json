@@ -1,11 +1,11 @@
 {
-  "character_accuracy": 0.0018018018018018018,
-  "word_accuracy": 0.0,
-  "precision": 0.36180180180180177,
-  "recall": 0.01664222358027407,
-  "f1": 0.007882342242946054,
-  "levenshtein_distance": 675.4,
-  "total_parameters": 4756016,
-  "non_embedding_parameters": 4734256,
-  "flops_per_sequence": 911540224
+  "character_accuracy": 0.04781751378382612,
+  "word_accuracy": 0.004868320085711392,
+  "precision": 0.5199365079365079,
+  "recall": 0.30569052965684196,
+  "f1": 0.09666203689969557,
+  "levenshtein_distance": 774.25,
+  "total_parameters": 4775856,
+  "non_embedding_parameters": 4759536,
+  "flops_per_sequence": 1241579520
 }

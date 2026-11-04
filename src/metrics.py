@@ -91,9 +91,9 @@ def measure_flops_forward(model: nn.Module, sample_input: torch.Tensor) -> int:
     except Exception:
         pass
     b, l = sample_input.shape
-    d = getattr(model, "d_model", 256)
-    n = getattr(model, "n_layers", 6)
-    v = getattr(model, "vocab_size", 85)
+    d = getattr(model, "d_model", 192)
+    n = getattr(model, "n_layers", 8)
+    v = getattr(model, "num_classes", 28)
     return int(b * (2 * n * (12 * d * d) * l + 2 * l * d * v))
 
 def evaluate_predictions(references: List[str], hypotheses: List[str]) -> Dict[str, float]:

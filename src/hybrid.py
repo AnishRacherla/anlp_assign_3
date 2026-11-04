@@ -1,43 +1,46 @@
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from .deltanet import DeltaNetBlock, RMSNorm
-from .mamba import MambaLayer
+from .deltanet import DeltaNetLayer
+from .mamba import MambaLayer, RMSNorm
+from .vocab import decode_target_sequence, NOISE_TARGET_ID
 
 class HybridMambaDeltaNet(nn.Module):
     def __init__(
         self,
-        vocab_size: int,
-        d_model: int = 256,
-        n_layers: int = 6,
+        vocab_size: int = 85,
+        num_classes: int = 28,
+        d_model: int = 192,
+        n_layers: int = 8,
         d_state: int = 16,
         expand: int = 2,
+        n_heads: int = 6,
         d_conv: int = 4,
-        n_heads: int = 8,
         max_seq_len: int = 512,
-        dropout: float = 0.1,
+        dropout: float = 0.0,
     ):
         super().__init__()
         assert n_layers % 2 == 0
         self.vocab_size = vocab_size
+        self.num_classes = num_classes
         self.d_model = d_model
         self.n_layers = n_layers
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(vocab_size, d_model)
-        
-        layers = []
-        for i in range(n_layers // 2):
-            layers.append(MambaLayer(d_model=d_model, d_state=d_state, expand=expand, d_conv=d_conv, dropout=dropout))
-            layers.append(DeltaNetBlock(d_model=d_model, n_heads=n_heads, dropout=dropout))
-        self.blocks = nn.ModuleList(layers)
+        self.layers = nn.ModuleList()
+        for _ in range(n_layers // 2):
+            self.layers.append(
+                MambaLayer(d_model, d_state=d_state, expand=expand, d_conv=d_conv, dropout=dropout)
+            )
+            self.layers.append(
+                DeltaNetLayer(d_model, n_heads=n_heads, d_conv=d_conv, dropout=dropout)
+            )
 
-        self.norm_f = RMSNorm(d_model)
-        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
-        self.lm_head.weight = self.token_emb.weight
+        self.norm_final = RMSNorm(d_model)
+        self.head = nn.Linear(d_model, num_classes, bias=False)
 
         self._init_weights()
 
@@ -52,42 +55,18 @@ class HybridMambaDeltaNet(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         x = self.token_emb(input_ids)
-        for block in self.blocks:
-            x, _ = block(x)
-        logits = self.lm_head(self.norm_f(x))
+        for layer in self.layers:
+            x = layer(x)
+        logits = self.head(self.norm_final(x))
         return logits
 
     @torch.no_grad()
-    def generate(self, prompt_ids: torch.Tensor, max_new_tokens: int, eos_id: int) -> List[int]:
+    def predict(self, input_ids: torch.Tensor) -> List[str]:
         self.eval()
-        b, prompt_len = prompt_ids.shape
-        x = self.token_emb(prompt_ids)
-
-        layer_states = []
-        for block in self.blocks:
-            x, state = block(x)
-            layer_states.append(state)
-
-        logits = self.lm_head(self.norm_f(x[:, -1]))
-        next_token = logits.argmax(dim=-1, keepdim=True)
-        generated = prompt_ids[0].tolist()
-
-        for _ in range(max_new_tokens):
-            if next_token.item() == eos_id:
-                break
-            generated.append(next_token.item())
-            if len(generated) >= self.max_seq_len:
-                break
-
-            curr_x = self.token_emb(next_token)
-            new_states = []
-            for i, block in enumerate(self.blocks):
-                curr_x, s = block.step(curr_x.squeeze(1), layer_states[i])
-                curr_x = curr_x.unsqueeze(1)
-                new_states.append(s)
-            layer_states = new_states
-
-            next_logits = self.lm_head(self.norm_f(curr_x.squeeze(1)))
-            next_token = next_logits.argmax(dim=-1, keepdim=True)
-
-        return generated
+        logits = self.forward(input_ids)
+        pred_ids = logits.argmax(dim=-1).cpu().tolist()
+        results = []
+        for row in pred_ids:
+            clean_row = [tid for tid in row[1:] if tid != NOISE_TARGET_ID]
+            results.append(decode_target_sequence(clean_row))
+        return results

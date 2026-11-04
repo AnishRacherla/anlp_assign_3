@@ -16,7 +16,7 @@ from .hub import init_wandb, push_to_hub
 from .hybrid import HybridMambaDeltaNet
 from .mamba import Mamba
 from .transformer import Transformer
-from .vocab import CharTokenizer, PAD_ID, BOS_ID, EOS_ID, SEP_ID
+from .vocab import CharTokenizer, NUM_TARGET_CLASSES, PAD_TARGET_ID
 
 try:
     import wandb
@@ -24,15 +24,22 @@ try:
 except ImportError:
     _HAS_WANDB = False
 
-def get_model(model_type: str, vocab_size: int, d_model: int = 256, n_layers: int = 6, max_seq_len: int = 512) -> nn.Module:
+def get_model(
+    model_type: str,
+    vocab_size: int,
+    num_classes: int = NUM_TARGET_CLASSES,
+    d_model: int = 192,
+    n_layers: int = 8,
+    max_seq_len: int = 512,
+) -> nn.Module:
     if model_type == "transformer":
-        return Transformer(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "mamba":
-        return Mamba(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "deltanet":
-        return DeltaNet(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "hybrid":
-        return HybridMambaDeltaNet(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def lr_schedule(step: int, warmup_steps: int, total_steps: int, min_ratio: float = 0.1) -> float:
@@ -46,13 +53,19 @@ def lr_schedule(step: int, warmup_steps: int, total_steps: int, min_ratio: float
 def evaluate_loss(model: nn.Module, loader, device: str) -> float:
     model.eval()
     total_loss, total_tokens = 0.0, 0
-    for inputs, labels in loader:
+    for batch in loader:
+        if isinstance(batch, (list, tuple)) and len(batch) >= 2:
+            inputs, labels = batch[0], batch[1]
+        else:
+            continue
+        if labels is None:
+            continue
         inputs = inputs.to(device)
         labels = labels.to(device)
         logits = model(inputs)
         b, t, v = logits.shape
-        loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=-100, reduction="sum")
-        n_tokens = (labels != -100).sum().item()
+        loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=PAD_TARGET_ID, reduction="sum")
+        n_tokens = (labels != PAD_TARGET_ID).sum().item()
         total_loss += loss.item()
         total_tokens += max(1, n_tokens)
     model.train()
@@ -64,8 +77,8 @@ def train(
     train_cleaned: str = "data/part1/train/cleaned.jsonl",
     val_cipher: str = "data/part1/validation/cipher.jsonl",
     val_cleaned: str = "data/part1/validation/cleaned.jsonl",
-    d_model: int = 256,
-    n_layers: int = 6,
+    d_model: int = 192,
+    n_layers: int = 8,
     max_seq_len: int = 512,
     batch_size: int = 32,
     epochs: int = 5,
@@ -94,6 +107,7 @@ def train(
         batch_size=batch_size,
         max_len=max_seq_len,
         shuffle=True,
+        is_train=True,
         max_samples=max_train_samples,
     )
     val_loader = get_dataloader(
@@ -103,18 +117,20 @@ def train(
         batch_size=batch_size,
         max_len=max_seq_len,
         shuffle=False,
+        is_train=False,
         max_samples=max_val_samples,
     )
 
     model = get_model(
         model_type=model_type,
         vocab_size=vocab_size,
+        num_classes=NUM_TARGET_CLASSES,
         d_model=d_model,
         n_layers=n_layers,
         max_seq_len=max_seq_len,
     ).to(device)
 
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+    optimizer = AdamW(model.parameters(), lr=lr, betas=(0.9, 0.95), weight_decay=0.01)
     total_steps = epochs * len(train_loader)
 
     use_wandb = wandb_project is not None and _HAS_WANDB
@@ -153,7 +169,7 @@ def train(
             with torch.autocast(device_type=dev_type, enabled=is_cuda):
                 logits = model(inputs)
                 b, t, v = logits.shape
-                loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=-100)
+                loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=PAD_TARGET_ID)
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -199,8 +215,8 @@ def parse_args():
     p.add_argument("--train-cleaned", type=str, default="data/part1/train/cleaned.jsonl")
     p.add_argument("--val-cipher", type=str, default="data/part1/validation/cipher.jsonl")
     p.add_argument("--val-cleaned", type=str, default="data/part1/validation/cleaned.jsonl")
-    p.add_argument("--d-model", type=int, default=256)
-    p.add_argument("--n-layers", type=int, default=6)
+    p.add_argument("--d-model", type=int, default=192)
+    p.add_argument("--n-layers", type=int, default=8)
     p.add_argument("--max-seq-len", type=int, default=512)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--epochs", type=int, default=5)

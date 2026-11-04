@@ -1,9 +1,31 @@
 import math
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from .vocab import decode_target_sequence, NOISE_TARGET_ID
+
+class RMSNorm(nn.Module):
+    def __init__(self, d_model: int, eps: float = 1e-5):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(d_model))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        variance = x.pow(2).mean(-1, keepdim=True)
+        return x * torch.rsqrt(variance + self.eps) * self.weight
+
+class GatedMLP(nn.Module):
+    def __init__(self, d_model: int, ffn_dim: int):
+        super().__init__()
+        self.fc1 = nn.Linear(d_model, ffn_dim * 2, bias=False)
+        self.fc2 = nn.Linear(ffn_dim, d_model, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1, x2 = self.fc1(x).chunk(2, dim=-1)
+        return self.fc2(F.silu(x1) * x2)
 
 def precompute_rope_freqs(d_head: int, max_seq_len: int, theta: float = 10000.0) -> Tuple[torch.Tensor, torch.Tensor]:
     dims = torch.arange(0, d_head, 2, dtype=torch.float32)
@@ -21,7 +43,7 @@ def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.T
     return x_rot.flatten(-2)
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, max_seq_len: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, n_heads: int, max_seq_len: int = 512, dropout: float = 0.0):
         super().__init__()
         assert d_model % n_heads == 0
         self.d_model = d_model
@@ -31,19 +53,9 @@ class CausalSelfAttention(nn.Module):
 
         self.qkv = nn.Linear(d_model, 3 * d_model, bias=False)
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
-        self.attn_drop = nn.Dropout(dropout)
-        self.resid_drop = nn.Dropout(dropout)
+        self.drop = nn.Dropout(dropout)
 
-        mask = torch.ones(max_seq_len, max_seq_len, dtype=torch.bool).tril()
-        self.register_buffer("causal_mask", mask.view(1, 1, max_seq_len, max_seq_len))
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        cos: torch.Tensor,
-        sin: torch.Tensor,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
         b, t, d = x.shape
         qkv = self.qkv(x)
         q, k, v = qkv.split(self.d_model, dim=-1)
@@ -55,80 +67,57 @@ class CausalSelfAttention(nn.Module):
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
 
-        if kv_cache is not None:
-            k = torch.cat([kv_cache[0], k], dim=-2)
-            v = torch.cat([kv_cache[1], v], dim=-2)
-        new_kv = (k, v)
-
-        seq_k = k.size(-2)
         attn = (q @ k.transpose(-2, -1)) * self.scale
-        if t == seq_k:
-            attn = attn.masked_fill(~self.causal_mask[:, :, :t, :t], float("-inf"))
+        causal_mask = torch.ones(t, t, device=x.device, dtype=torch.bool).tril()
+        attn = attn.masked_fill(~causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
         attn = F.softmax(attn, dim=-1)
-        attn = self.attn_drop(attn)
+        attn = self.drop(attn)
 
         out = (attn @ v).transpose(1, 2).contiguous().view(b, t, d)
-        return self.resid_drop(self.out_proj(out)), new_kv
-
-class MLP(nn.Module):
-    def __init__(self, d_model: int, ffn_dim: int, dropout: float = 0.1):
-        super().__init__()
-        self.fc1 = nn.Linear(d_model, ffn_dim, bias=False)
-        self.fc2 = nn.Linear(ffn_dim, d_model, bias=False)
-        self.drop = nn.Dropout(dropout)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fc2(self.drop(F.gelu(self.fc1(x))))
+        return self.out_proj(out)
 
 class TransformerBlock(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, max_seq_len: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, n_heads: int, max_seq_len: int = 512, dropout: float = 0.0):
         super().__init__()
-        self.ln1 = nn.LayerNorm(d_model)
-        self.attn = CausalSelfAttention(d_model, n_heads, max_seq_len, dropout)
-        self.ln2 = nn.LayerNorm(d_model)
-        self.mlp = MLP(d_model, 4 * d_model, dropout)
+        self.norm1 = RMSNorm(d_model)
+        self.attn = CausalSelfAttention(d_model, n_heads, max_seq_len=max_seq_len, dropout=dropout)
+        self.norm2 = RMSNorm(d_model)
+        self.mlp = GatedMLP(d_model, 4 * d_model)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        cos: torch.Tensor,
-        sin: torch.Tensor,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        attn_out, new_kv = self.attn(self.ln1(x), cos, sin, kv_cache=kv_cache)
-        x = x + attn_out
-        x = x + self.mlp(self.ln2(x))
-        return x, new_kv
+    def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.norm1(x), cos, sin)
+        x = x + self.mlp(self.norm2(x))
+        return x
 
 class Transformer(nn.Module):
     def __init__(
         self,
-        vocab_size: int,
-        d_model: int = 256,
-        n_layers: int = 6,
-        n_heads: int = 8,
+        vocab_size: int = 85,
+        num_classes: int = 28,
+        d_model: int = 192,
+        n_layers: int = 8,
+        n_heads: int = 6,
         max_seq_len: int = 512,
-        dropout: float = 0.1,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.vocab_size = vocab_size
+        self.num_classes = num_classes
         self.d_model = d_model
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(vocab_size, d_model)
-        self.emb_drop = nn.Dropout(dropout)
         self.blocks = nn.ModuleList([
-            TransformerBlock(d_model, n_heads, max_seq_len, dropout)
+            TransformerBlock(d_model, n_heads, max_seq_len=max_seq_len, dropout=dropout)
             for _ in range(n_layers)
         ])
-        self.ln_final = nn.LayerNorm(d_model)
-        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
-        self.lm_head.weight = self.token_emb.weight
+        self.norm_final = RMSNorm(d_model)
+        self.head = nn.Linear(d_model, num_classes, bias=False)
 
         d_head = d_model // n_heads
-        cos, sin = precompute_rope_freqs(d_head, max_seq_len)
+        cos, sin = precompute_rope_freqs(d_head, max(max_seq_len, 4096))
         self.register_buffer("rope_cos", cos)
         self.register_buffer("rope_sin", sin)
 
@@ -145,51 +134,28 @@ class Transformer(nn.Module):
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         b, t = input_ids.shape
-        x = self.emb_drop(self.token_emb(input_ids))
-        cos = self.rope_cos[:t]
-        sin = self.rope_sin[:t]
+        x = self.token_emb(input_ids)
+        if t > self.rope_cos.size(0):
+            d_head = self.d_model // self.n_heads
+            cos, sin = precompute_rope_freqs(d_head, t)
+            cos = cos.to(x.device)
+            sin = sin.to(x.device)
+        else:
+            cos = self.rope_cos[:t].to(x.device)
+            sin = self.rope_sin[:t].to(x.device)
+
         for block in self.blocks:
-            x, _ = block(x, cos, sin)
-        logits = self.lm_head(self.ln_final(x))
+            x = block(x, cos, sin)
+        logits = self.head(self.norm_final(x))
         return logits
 
     @torch.no_grad()
-    def generate(self, prompt_ids: torch.Tensor, max_new_tokens: int, eos_id: int) -> List[int]:
+    def predict(self, input_ids: torch.Tensor) -> List[str]:
         self.eval()
-        b, prompt_len = prompt_ids.shape
-        x = self.emb_drop(self.token_emb(prompt_ids))
-
-        kv_caches = []
-        cos = self.rope_cos[:prompt_len]
-        sin = self.rope_sin[:prompt_len]
-        for block in self.blocks:
-            x, kv = block(x, cos, sin)
-            kv_caches.append(kv)
-
-        logits = self.lm_head(self.ln_final(x[:, -1]))
-        next_token = logits.argmax(dim=-1, keepdim=True)
-        generated = prompt_ids[0].tolist()
-
-        curr_pos = prompt_len
-        for _ in range(max_new_tokens):
-            if next_token.item() == eos_id:
-                break
-            generated.append(next_token.item())
-            if len(generated) >= self.max_seq_len:
-                break
-
-            curr_x = self.emb_drop(self.token_emb(next_token))
-            cos_t = self.rope_cos[curr_pos : curr_pos + 1]
-            sin_t = self.rope_sin[curr_pos : curr_pos + 1]
-
-            new_caches = []
-            for i, block in enumerate(self.blocks):
-                curr_x, kv = block(curr_x, cos_t, sin_t, kv_cache=kv_caches[i])
-                new_caches.append(kv)
-            kv_caches = new_caches
-            curr_pos += 1
-
-            next_logits = self.lm_head(self.ln_final(curr_x.squeeze(1)))
-            next_token = next_logits.argmax(dim=-1, keepdim=True)
-
-        return generated
+        logits = self.forward(input_ids)
+        pred_ids = logits.argmax(dim=-1).cpu().tolist()
+        results = []
+        for row in pred_ids:
+            clean_row = [tid for tid in row[1:] if tid != NOISE_TARGET_ID]
+            results.append(decode_target_sequence(clean_row))
+        return results

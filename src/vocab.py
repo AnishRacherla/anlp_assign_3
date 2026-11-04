@@ -13,6 +13,28 @@ EOS_ID = 2
 SEP_ID = 3
 
 ALL_CHARS = " !'+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz{}"
+NOISE_CHARS = set("!'+,-./:;<=>?[]_{}")
+PLAIN_CHARS = "abcdefghijklmnopqrstuvwxyz "
+
+NUM_TARGET_CLASSES = 28
+NOISE_TARGET_ID = 27
+PAD_TARGET_ID = -100
+
+def char_to_target_id(ch: str) -> int:
+    idx = PLAIN_CHARS.find(ch)
+    return idx if idx != -1 else 26
+
+def target_id_to_char(idx: int) -> str:
+    if 0 <= idx < 27:
+        return PLAIN_CHARS[idx]
+    return ""
+
+def decode_target_sequence(target_ids: List[int]) -> str:
+    chars = []
+    for tid in target_ids:
+        if 0 <= tid < 27:
+            chars.append(PLAIN_CHARS[tid])
+    return "".join(chars)
 
 class CharTokenizer:
     def __init__(self):
@@ -68,4 +90,3 @@ class CharTokenizer:
         tok.token_to_id = {v: k for k, v in tok.id_to_token.items()}
         tok.vocab_size = len(tok.id_to_token)
         return tok
-

@@ -8,24 +8,31 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from .dataset import CipherDataset
+from .dataset import get_dataloader
 from .deltanet import DeltaNet
 from .hub import pull_from_hub
 from .hybrid import HybridMambaDeltaNet
 from .mamba import Mamba
 from .metrics import count_parameters, measure_flops_forward, evaluate_predictions
 from .transformer import Transformer
-from .vocab import CharTokenizer, BOS_ID, EOS_ID, SEP_ID
+from .vocab import CharTokenizer, NUM_TARGET_CLASSES
 
-def get_model(model_type: str, vocab_size: int, d_model: int = 256, n_layers: int = 6, max_seq_len: int = 512) -> nn.Module:
+def get_model(
+    model_type: str,
+    vocab_size: int,
+    num_classes: int = NUM_TARGET_CLASSES,
+    d_model: int = 192,
+    n_layers: int = 8,
+    max_seq_len: int = 512,
+) -> nn.Module:
     if model_type == "transformer":
-        return Transformer(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "mamba":
-        return Mamba(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "deltanet":
-        return DeltaNet(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     elif model_type == "hybrid":
-        return HybridMambaDeltaNet(vocab_size=vocab_size, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def load_checkpoint(
@@ -54,13 +61,6 @@ def load_checkpoint(
     model.eval()
     return model
 
-@torch.no_grad()
-def decrypt_sequence(model: nn.Module, prompt_ids: torch.Tensor, tokenizer: CharTokenizer, max_new_tokens: int = 256) -> str:
-    generated_ids = model.generate(prompt_ids, max_new_tokens=max_new_tokens, eos_id=EOS_ID)
-    prompt_len = prompt_ids.size(1)
-    target_ids = generated_ids[prompt_len:]
-    return tokenizer.decode(target_ids, skip_special_tokens=True)
-
 def run_evaluation(
     model_type: str = "hybrid",
     checkpoint_path: Optional[str] = None,
@@ -74,9 +74,10 @@ def run_evaluation(
     results_dir: str = "results/part1",
     hf_repo_id: Optional[str] = None,
     hf_filename: Optional[str] = None,
-    d_model: int = 256,
-    n_layers: int = 6,
+    d_model: int = 192,
+    n_layers: int = 8,
     max_seq_len: int = 512,
+    batch_size: int = 32,
     device: Optional[str] = None,
     max_samples: Optional[int] = None,
 ) -> Dict[str, float]:
@@ -94,6 +95,7 @@ def run_evaluation(
     model = get_model(
         model_type=model_type,
         vocab_size=vocab_size,
+        num_classes=NUM_TARGET_CLASSES,
         d_model=d_model,
         n_layers=n_layers,
         max_seq_len=max_seq_len,
@@ -112,19 +114,25 @@ def run_evaluation(
             candidates = list(target_cipher.glob("*.jsonl"))
             target_cipher = candidates[0] if candidates else target_cipher / "cipher.jsonl"
         cleaned_path = None
-        ds = CipherDataset(
+        eval_loader = get_dataloader(
             cipher_path=target_cipher,
             cleaned_path=None,
             tokenizer=tokenizer,
+            batch_size=batch_size,
             max_len=max_seq_len,
+            shuffle=False,
+            is_train=False,
             max_samples=max_samples,
         )
     else:
-        ds = CipherDataset(
+        eval_loader = get_dataloader(
             cipher_path=cipher_path,
             cleaned_path=cleaned_path,
             tokenizer=tokenizer,
+            batch_size=batch_size,
             max_len=max_seq_len,
+            shuffle=False,
+            is_train=False,
             max_samples=max_samples,
         )
 
@@ -142,27 +150,20 @@ def run_evaluation(
     hypotheses = []
 
     with open(out_filename, "w", encoding="utf-8") as f_out:
-        for idx in tqdm(range(len(ds)), desc="Decrypting"):
-            raw_item = ds.samples[idx]
-            cipher_ids = tokenizer.encode(raw_item.get("ciphertext", ""))
-            prompt = torch.tensor([[BOS_ID] + cipher_ids + [SEP_ID]], dtype=torch.long, device=device)
-            if prompt.size(1) >= max_seq_len - 1:
-                prompt = prompt[:, :max_seq_len - 2]
+        for inputs, labels, ids, raw_ciphers, raw_plains in tqdm(eval_loader, desc=f"Evaluating {model_type}"):
+            inputs = inputs.to(device)
+            batch_preds = model.predict(inputs)
+            hypotheses.extend(batch_preds)
+            if raw_plains and raw_plains[0]:
+                references.extend(raw_plains)
 
-            max_new = max_seq_len - prompt.size(1)
-            hyp_text = decrypt_sequence(model, prompt, tokenizer, max_new_tokens=max_new)
-            hypotheses.append(hyp_text)
-
-            record = {"id": raw_item.get("id", str(idx)), "text": hyp_text}
-            f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-            if ds.has_targets:
-                references.append(raw_item.get("text", ""))
+            for id_val, hyp in zip(ids, batch_preds):
+                f_out.write(json.dumps({"id": id_val, "text": hyp}, ensure_ascii=False) + "\n")
 
     print(f"Decrypted outputs saved to {out_filename}")
 
     metrics = {}
-    if ds.has_targets:
+    if references and len(references) == len(hypotheses):
         metrics = evaluate_predictions(references, hypotheses)
         total_p, non_emb_p = count_parameters(model)
         sample_tensor = torch.randint(0, vocab_size, (1, min(max_seq_len, 256)), device=device)
@@ -199,9 +200,10 @@ def parse_args():
     p.add_argument("--results-dir", type=str, default="results/part1")
     p.add_argument("--hf-repo-id", type=str, default=None)
     p.add_argument("--hf-filename", type=str, default=None)
-    p.add_argument("--d-model", type=int, default=256)
-    p.add_argument("--n-layers", type=int, default=6)
+    p.add_argument("--d-model", type=int, default=192)
+    p.add_argument("--n-layers", type=int, default=8)
     p.add_argument("--max-seq-len", type=int, default=512)
+    p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--device", type=str, default=None)
     p.add_argument("--max-samples", type=int, default=None)
     return p.parse_args()
@@ -224,6 +226,7 @@ if __name__ == "__main__":
         d_model=args.d_model,
         n_layers=args.n_layers,
         max_seq_len=args.max_seq_len,
+        batch_size=args.batch_size,
         device=args.device,
         max_samples=args.max_samples,
     )

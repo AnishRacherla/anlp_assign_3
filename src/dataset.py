@@ -1,11 +1,20 @@
 import json
+import random
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from .vocab import CharTokenizer, BOS_ID, EOS_ID, SEP_ID, PAD_ID
+from .vocab import (
+    CharTokenizer,
+    BOS_ID,
+    PAD_ID,
+    NOISE_CHARS,
+    NOISE_TARGET_ID,
+    PAD_TARGET_ID,
+    char_to_target_id,
+)
 
 class CipherDataset(Dataset):
     def __init__(
@@ -14,10 +23,12 @@ class CipherDataset(Dataset):
         cleaned_path: Optional[Union[str, Path]] = None,
         tokenizer: Optional[CharTokenizer] = None,
         max_len: int = 512,
+        is_train: bool = True,
         max_samples: Optional[int] = None,
     ):
         self.tokenizer = tokenizer or CharTokenizer()
         self.max_len = max_len
+        self.is_train = is_train
         self.samples = []
 
         cipher_path = Path(cipher_path)
@@ -49,36 +60,52 @@ class CipherDataset(Dataset):
 
     def __getitem__(self, idx: int):
         item = self.samples[idx]
-        cipher_ids = self.tokenizer.encode(item.get("ciphertext", ""))
+        raw_cipher = item.get("ciphertext", "")
+        cipher_ids = self.tokenizer.encode(raw_cipher)
 
         if not self.has_targets:
-            prompt_ids = [BOS_ID] + cipher_ids + [SEP_ID]
-            if len(prompt_ids) > self.max_len:
-                prompt_ids = prompt_ids[:self.max_len]
+            inp = [BOS_ID] + cipher_ids
             return {
                 "id": item.get("id", str(idx)),
-                "prompt_ids": torch.tensor(prompt_ids, dtype=torch.long),
+                "input_ids": torch.tensor(inp, dtype=torch.long),
+                "raw_cipher": raw_cipher,
             }
 
-        target_ids = self.tokenizer.encode(item.get("text", ""))
-        total_len = 1 + len(cipher_ids) + 1 + len(target_ids) + 1
-
-        if total_len > self.max_len:
-            budget = self.max_len - 3
-            if len(cipher_ids) >= budget:
-                cipher_ids = cipher_ids[:budget - 16]
-                target_ids = target_ids[:16]
+        raw_plain = item.get("text", "")
+        target_ids = []
+        p_idx = 0
+        plain_len = len(raw_plain)
+        for ch in raw_cipher:
+            if ch in NOISE_CHARS:
+                target_ids.append(NOISE_TARGET_ID)
             else:
-                target_budget = budget - len(cipher_ids)
-                target_ids = target_ids[:target_budget]
+                if p_idx < plain_len:
+                    target_ids.append(char_to_target_id(raw_plain[p_idx]))
+                    p_idx += 1
+                else:
+                    target_ids.append(NOISE_TARGET_ID)
 
-        input_ids = [BOS_ID] + cipher_ids + [SEP_ID] + target_ids + [EOS_ID]
-        labels = [-100] * (len(cipher_ids) + 2) + target_ids + [EOS_ID]
+        input_ids = [BOS_ID] + cipher_ids
+        labels = [PAD_TARGET_ID] + target_ids
+
+        seq_len = len(input_ids)
+        if self.is_train and self.max_len and seq_len > self.max_len:
+            max_start = seq_len - self.max_len
+            start = random.randint(0, max_start)
+            input_ids = input_ids[start : start + self.max_len]
+            labels = labels[start : start + self.max_len]
+            input_ids[0] = BOS_ID
+            labels[0] = PAD_TARGET_ID
+        elif not self.is_train and self.max_len and seq_len > self.max_len:
+            input_ids = input_ids[: self.max_len]
+            labels = labels[: self.max_len]
 
         return {
             "id": item.get("id", str(idx)),
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "labels": torch.tensor(labels, dtype=torch.long),
+            "raw_cipher": raw_cipher,
+            "raw_plain": raw_plain,
         }
 
 def collate_train_batch(batch: List[dict]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -86,15 +113,37 @@ def collate_train_batch(batch: List[dict]) -> Tuple[torch.Tensor, torch.Tensor]:
     b_size = len(batch)
 
     inputs = torch.full((b_size, max_len), PAD_ID, dtype=torch.long)
-    labels = torch.full((b_size, max_len), -100, dtype=torch.long)
+    labels = torch.full((b_size, max_len), PAD_TARGET_ID, dtype=torch.long)
 
     for i, item in enumerate(batch):
         inp = item["input_ids"]
         lbl = item["labels"]
-        inputs[i, :len(inp)] = inp
-        labels[i, :len(lbl)] = lbl
+        inputs[i, : len(inp)] = inp
+        labels[i, : len(lbl)] = lbl
 
     return inputs, labels
+
+def collate_eval_batch(batch: List[dict]):
+    max_len = max(len(x["input_ids"]) for x in batch)
+    b_size = len(batch)
+
+    inputs = torch.full((b_size, max_len), PAD_ID, dtype=torch.long)
+    for i, item in enumerate(batch):
+        inp = item["input_ids"]
+        inputs[i, : len(inp)] = inp
+
+    ids = [x["id"] for x in batch]
+    raw_ciphers = [x["raw_cipher"] for x in batch]
+    raw_plains = [x.get("raw_plain", "") for x in batch]
+
+    labels = None
+    if "labels" in batch[0]:
+        labels = torch.full((b_size, max_len), PAD_TARGET_ID, dtype=torch.long)
+        for i, item in enumerate(batch):
+            lbl = item["labels"]
+            labels[i, : len(lbl)] = lbl
+
+    return inputs, labels, ids, raw_ciphers, raw_plains
 
 def get_dataloader(
     cipher_path: Union[str, Path],
@@ -103,21 +152,16 @@ def get_dataloader(
     batch_size: int = 32,
     max_len: int = 512,
     shuffle: bool = True,
+    is_train: bool = True,
     max_samples: Optional[int] = None,
-    num_workers: int = 0,
 ) -> DataLoader:
     ds = CipherDataset(
         cipher_path=cipher_path,
         cleaned_path=cleaned_path,
         tokenizer=tokenizer,
         max_len=max_len,
+        is_train=is_train,
         max_samples=max_samples,
     )
-    return DataLoader(
-        ds,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        collate_fn=collate_train_batch if ds.has_targets else None,
-        num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-    )
+    collate_fn = collate_train_batch if is_train else collate_eval_batch
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
