@@ -19,11 +19,32 @@ MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-}"
 echo "=== System GPU Check ==="
 nvidia-smi
 
-# Setup working directory if cloning inside Kaggle
-if [ -n "$GIT_REPO_URL" ]; then
+# Setup working directory if not already inside repo
+if [ ! -d "src" ] && [ -n "$GIT_REPO_URL" ]; then
     echo "Cloning repository from $GIT_REPO_URL ..."
     git clone -b "$GIT_BRANCH" "$GIT_REPO_URL" repo
     cd repo
+fi
+
+# Auto-link dataset from /kaggle/input if missing
+if [ ! -f "data/part1/train/cipher.jsonl" ]; then
+    echo "Dataset not found in data/part1/train/cipher.jsonl. Searching /kaggle/input/ ..."
+    FOUND_CIPHER=$(find /kaggle/input -name "cipher.jsonl" 2>/dev/null | grep -E "train|part1" | head -n 1)
+    if [ -z "$FOUND_CIPHER" ]; then
+        FOUND_CIPHER=$(find /kaggle/input -name "cipher.jsonl" 2>/dev/null | head -n 1)
+    fi
+    if [ -n "$FOUND_CIPHER" ]; then
+        DATA_SRC=$(dirname "$FOUND_CIPHER")
+        echo "Found dataset near: $DATA_SRC"
+        mkdir -p data/part1
+        if [ -d "$DATA_SRC/train" ]; then
+            cp -rn "$DATA_SRC"/* data/part1/ 2>/dev/null || true
+        elif [ -d "$(dirname "$DATA_SRC")/train" ]; then
+            cp -rn "$(dirname "$DATA_SRC")"/* data/part1/ 2>/dev/null || true
+        else
+            cp -rn "$DATA_SRC" data/part1/train 2>/dev/null || true
+        fi
+    fi
 fi
 
 echo "=== Installing Dependencies ==="
