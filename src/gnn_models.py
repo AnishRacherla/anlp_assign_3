@@ -107,3 +107,4 @@ def build_gnn_model(model_name: str, in_channels: int, hidden_channels: int = 64
     elif m == "bigcn":
         return BiGCNClassifier(in_channels, hidden_channels, out_channels, dropout)
     raise ValueError(f"Unknown GNN model: {model_name}")
+

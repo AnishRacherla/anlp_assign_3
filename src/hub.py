@@ -54,7 +54,7 @@ def push_to_hub(
     token = os.environ.get("HUGGINGFACE_KEY") or os.environ.get("HF_TOKEN")
     if token:
         hf_login(token=token)
-    api = HfApi()
+    api = HfApi(token=token)
     api.create_repo(repo_id=repo_id, repo_type=repo_type, exist_ok=True)
     f_path = Path(local_path)
     remote_name = filename or f_path.name
