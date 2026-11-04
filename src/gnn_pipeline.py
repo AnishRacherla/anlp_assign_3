@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+import os
 import random
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -13,6 +14,12 @@ from torch_geometric.datasets import UPFD
 from torch_geometric.loader import DataLoader
 
 from .gnn_models import build_gnn_model
+
+try:
+    import wandb
+    _HAS_WANDB = True
+except ImportError:
+    _HAS_WANDB = False
 
 SEEDS = [42, 1337, 2024, 7, 99]
 
@@ -155,7 +162,13 @@ def run_experiment_across_seeds(
 
     return means, stds
 
-def run_all(ta_mode: bool = False, epochs: int = 60, batch_size: int = 64, device: Optional[str] = None):
+def run_all(
+    ta_mode: bool = False,
+    epochs: int = 60,
+    batch_size: int = 64,
+    device: Optional[str] = None,
+    wandb_project: Optional[str] = None,
+):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -225,14 +238,35 @@ def run_all(ta_mode: bool = False, epochs: int = 60, batch_size: int = 64, devic
         json.dump(detailed_report, f_det, indent=2)
     print(f"Saved detailed metrics (mean ± std) to: {detailed_json}")
 
+    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
+    if wb_proj and _HAS_WANDB:
+        key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
+        if key:
+            wandb.login(key=key)
+        wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
+        for m, vals in results_template["part_a"].items():
+            for metric_k, metric_v in vals.items():
+                wandb.log({f"arch_{m}/{metric_k}": metric_v})
+        for f, vals in results_template["part_b"].items():
+            for metric_k, metric_v in vals.items():
+                wandb.log({f"feature_{f}/{metric_k}": metric_v})
+        wandb.finish()
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--ta", action="store_true")
     p.add_argument("--epochs", type=int, default=60)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--device", type=str, default=None)
+    p.add_argument("--wandb-project", type=str, default=None)
     return p.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    run_all(ta_mode=args.ta, epochs=args.epochs, batch_size=args.batch_size, device=args.device)
+    run_all(
+        ta_mode=args.ta,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        device=args.device,
+        wandb_project=args.wandb_project,
+    )
