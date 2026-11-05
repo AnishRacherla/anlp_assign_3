@@ -15,3 +15,16 @@ dependencies = [
     "pyyaml>=6.0",
     "scipy>=1.11.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+]
