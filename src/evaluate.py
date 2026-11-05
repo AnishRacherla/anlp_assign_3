@@ -1,8 +1,18 @@
 import argparse
+import ctypes
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+
+for _p in sys.path:
+    if "site-packages" in _p:
+        for _so in Path(_p).glob("nvidia/*/lib/*.so*"):
+            try:
+                ctypes.CDLL(str(_so), mode=ctypes.RTLD_GLOBAL)
+            except Exception:
+                pass
 
 import torch
 import torch.nn as nn

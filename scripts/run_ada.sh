@@ -62,6 +62,12 @@ echo "=== uv version: $(uv --version) ==="
 # Sync virtual environment from pyproject.toml
 echo "=== Syncing Environment via uv sync ==="
 uv sync
+uv pip install nvidia-cudnn-cu12 nvidia-nccl-cu12 nvidia-cublas-cu12
+
+SITE_PKG=$(uv run python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "")
+if [ -n "$SITE_PKG" ]; then
+    export LD_LIBRARY_PATH="$SITE_PKG/nvidia/cudnn/lib:$SITE_PKG/nvidia/nccl/lib:$SITE_PKG/nvidia/cublas/lib:$LD_LIBRARY_PATH"
+fi
 
 # Ensure local venv nvidia libraries take priority over any conflicting system libraries
 VENV_NVIDIA_LIBS=$(find .venv -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':')
