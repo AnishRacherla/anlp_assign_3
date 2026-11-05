@@ -63,6 +63,17 @@ echo "=== uv version: $(uv --version) ==="
 echo "=== Syncing Environment via uv sync ==="
 uv sync
 
+echo "=== Verifying CUDA Compatibility ==="
+if ! uv run python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+    echo "Default PyTorch wheel does not match cluster driver. Installing PyTorch cu121..."
+    uv pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cu121
+    if ! uv run python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+        echo "Trying PyTorch cu118..."
+        uv pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    fi
+fi
+uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
+
 mkdir -p logs/part1 models/part1 output/part1 results/part1
 
 # Verify dataset
