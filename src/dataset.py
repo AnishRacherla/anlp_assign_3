@@ -92,7 +92,7 @@ class CipherDataset(Dataset):
         input_ids = [BOS_ID] + cipher_ids
         labels = [PAD_TARGET_ID] + target_ids
 
-        if self.max_len and len(input_ids) > self.max_len:
+        if self.is_train and self.max_len and len(input_ids) > self.max_len:
             input_ids = input_ids[: self.max_len]
             labels = labels[: self.max_len]
 

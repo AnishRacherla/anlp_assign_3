@@ -143,7 +143,7 @@ def run_evaluation(
             cleaned_path=None,
             tokenizer=tokenizer,
             batch_size=batch_size,
-            max_len=max_seq_len,
+            max_len=None,
             shuffle=False,
             is_train=False,
             max_samples=max_samples,
@@ -154,7 +154,7 @@ def run_evaluation(
             cleaned_path=cleaned_path,
             tokenizer=tokenizer,
             batch_size=batch_size,
-            max_len=max_seq_len,
+            max_len=None,
             shuffle=False,
             is_train=False,
             max_samples=max_samples,
@@ -177,12 +177,6 @@ def run_evaluation(
         for inputs, labels, ids, raw_ciphers, raw_plains, lengths in tqdm(eval_loader, desc=f"Evaluating {model_type}"):
             inputs = inputs.to(device)
             batch_preds = model.predict(inputs, lengths=lengths)
-            hypotheses.extend(batch_preds)
-            if raw_plains and raw_plains[0]:
-                references.extend(raw_plains)
-
-            for id_val, hyp in zip(ids, batch_preds):
-                f_out.write(json.dumps({"id": id_val, "text": hyp}, ensure_ascii=False) + "\n")
             hypotheses.extend(batch_preds)
             if raw_plains and raw_plains[0]:
                 references.extend(raw_plains)
