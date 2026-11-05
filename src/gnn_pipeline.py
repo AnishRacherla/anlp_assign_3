@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.datasets import UPFD
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import ToUndirected
 
 from .gnn_models import build_gnn_model
 
@@ -85,8 +86,8 @@ def train_single_run(
     val_loader: DataLoader,
     test_loader: DataLoader,
     in_channels: int,
-    epochs: int = 60,
-    lr: float = 0.001,
+    epochs: int = 100,
+    lr: float = 0.005,
     weight_decay: float = 0.001,
     device: str = "cpu",
     seed: int = 42,
@@ -128,10 +129,12 @@ def run_experiment_across_seeds(
     batch_size: int,
     device: str,
     seeds: List[int],
+    lr: float = 0.005,
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
-    train_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="train")
-    val_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="val")
-    test_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="test")
+    transform = None if model_name.lower() == "bigcn" else ToUndirected()
+    train_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="train", transform=transform)
+    val_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="val", transform=transform)
+    test_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="test", transform=transform)
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
@@ -148,6 +151,7 @@ def run_experiment_across_seeds(
             test_loader=test_loader,
             in_channels=in_channels,
             epochs=epochs,
+            lr=lr,
             device=device,
             seed=s,
         )
@@ -164,8 +168,9 @@ def run_experiment_across_seeds(
 
 def run_all(
     ta_mode: bool = False,
-    epochs: int = 60,
+    epochs: int = 100,
     batch_size: int = 64,
+    lr: float = 0.005,
     device: Optional[str] = None,
     wandb_project: Optional[str] = None,
 ):
@@ -198,35 +203,47 @@ def run_all(
 
     models_part_a = ["mlp", "gcn", "sage", "gat", "bigcn"]
     for m in models_part_a:
-        print(f"\n[PART A] Running {m.upper()} on BERT features across 5 seeds...")
+        print(f"\n[ARCH EXPERIMENT] Running {m.upper()} on BERT features across 5 seeds...")
         means, stds = run_experiment_across_seeds(
             model_name=m,
             feature_name="bert",
             root_data_dir=root_dir,
             epochs=epochs,
             batch_size=batch_size,
+            lr=lr,
             device=device,
             seeds=SEEDS,
         )
         results_template["part_a"][m] = means
         detailed_report["part_a"][m] = {"mean": means, "std": stds}
-        print(f"  {m.upper()} Results: {means}")
+        print(f"  {m.upper()} Mean: {means}")
+        print(f"  {m.upper()} Std:  {stds}")
 
     features_part_b = ["profile", "spacy", "bert", "content"]
     for f in features_part_b:
-        print(f"\n[PART B] Running GraphSAGE on {f.upper()} features across 5 seeds...")
+        if f == "bert" and "sage" in detailed_report["part_a"]:
+            means = results_template["part_a"]["sage"]
+            stds = detailed_report["part_a"]["sage"]["std"]
+            results_template["part_b"][f] = means
+            detailed_report["part_b"][f] = {"mean": means, "std": stds}
+            print(f"\n[FEATURE ABLATION] GraphSAGE (BERT) reused from architecture comparison: {means}")
+            continue
+
+        print(f"\n[FEATURE ABLATION] Running GraphSAGE on {f.upper()} features across 5 seeds...")
         means, stds = run_experiment_across_seeds(
             model_name="sage",
             feature_name=f,
             root_data_dir=root_dir,
             epochs=epochs,
             batch_size=batch_size,
+            lr=lr,
             device=device,
             seeds=SEEDS,
         )
         results_template["part_b"][f] = means
         detailed_report["part_b"][f] = {"mean": means, "std": stds}
-        print(f"  GraphSAGE ({f.upper()}) Results: {means}")
+        print(f"  GraphSAGE ({f.upper()}) Mean: {means}")
+        print(f"  GraphSAGE ({f.upper()}) Std:  {stds}")
 
     target_json = out_dir / ("results_ta.json" if ta_mode else "results.json")
     with open(target_json, "w", encoding="utf-8") as f_out:
@@ -237,6 +254,27 @@ def run_all(
     with open(detailed_json, "w", encoding="utf-8") as f_det:
         json.dump(detailed_report, f_det, indent=2)
     print(f"Saved detailed metrics (mean ± std) to: {detailed_json}")
+
+    print("\n" + "=" * 60)
+    print("SUMMARY TABLE: ARCHITECTURE COMPARISON (BERT FEATURES)")
+    print("=" * 60)
+    print(f"{'Model':<10} | {'Accuracy':<18} | {'Precision':<18} | {'Recall':<18} | {'F1-Score':<18}")
+    print("-" * 60)
+    for m in models_part_a:
+        mean = detailed_report["part_a"][m]["mean"]
+        std = detailed_report["part_a"][m]["std"]
+        print(f"{m.upper():<10} | {mean['accuracy']*100:.2f} ± {std['accuracy']*100:.2f}%     | {mean['precision']*100:.2f} ± {std['precision']*100:.2f}%     | {mean['recall']*100:.2f} ± {std['recall']*100:.2f}%     | {mean['f1']*100:.2f} ± {std['f1']*100:.2f}%")
+
+    print("\n" + "=" * 60)
+    print("SUMMARY TABLE: FEATURE ABLATION (GRAPHSAGE)")
+    print("=" * 60)
+    print(f"{'Feature':<10} | {'Accuracy':<18} | {'Precision':<18} | {'Recall':<18} | {'F1-Score':<18}")
+    print("-" * 60)
+    for f in features_part_b:
+        mean = detailed_report["part_b"][f]["mean"]
+        std = detailed_report["part_b"][f]["std"]
+        print(f"{f.upper():<10} | {mean['accuracy']*100:.2f} ± {std['accuracy']*100:.2f}%     | {mean['precision']*100:.2f} ± {std['precision']*100:.2f}%     | {mean['recall']*100:.2f} ± {std['recall']*100:.2f}%     | {mean['f1']*100:.2f} ± {std['f1']*100:.2f}%")
+    print("=" * 60)
 
     wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
     if wb_proj and _HAS_WANDB:
@@ -255,8 +293,9 @@ def run_all(
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--ta", action="store_true")
-    p.add_argument("--epochs", type=int, default=60)
+    p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=64)
+    p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--device", type=str, default=None)
     p.add_argument("--wandb-project", type=str, default=None)
     return p.parse_args()
@@ -267,6 +306,7 @@ if __name__ == "__main__":
         ta_mode=args.ta,
         epochs=args.epochs,
         batch_size=args.batch_size,
+        lr=args.lr,
         device=args.device,
         wandb_project=args.wandb_project,
     )
