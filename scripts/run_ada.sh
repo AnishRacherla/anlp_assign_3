@@ -6,10 +6,10 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=8G
 #SBATCH --time=04:00:00
-#SBATCH --output=logs/part1/ada_%j.out
-#SBATCH --error=logs/part1/ada_%j.err
+#SBATCH --output=logs/part1/ada_%j.log
 
 set -e
+export PYTHONUNBUFFERED=1
 
 # ==============================================================================
 # ANLP Assignment 3 - Ada Cluster Runner
