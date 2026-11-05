@@ -122,6 +122,7 @@ if [ "$NUM_GPUS" -ge 2 ]; then
     wait $PID_1
 else
     echo "=== Running Single-GPU Sequential Pipeline ==="
+    uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device count: {torch.cuda.device_count()}')"
     MODELS=("transformer" "mamba" "deltanet" "hybrid")
     for M in "${MODELS[@]}"; do
         echo "--- Training $M ---"
@@ -130,13 +131,15 @@ else
             --epochs "$EPOCHS" \
             --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" \
+            --device cuda:0 \
             $EXTRA_FLAGS
             
         echo "--- Evaluating $M ---"
         uv run python -m src.evaluate \
             --model-type "$M" \
             --checkpoint-path "models/part1/${M}_best.pt" \
-            --roll-number "$ROLL_NUMBER"
+            --roll-number "$ROLL_NUMBER" \
+            --device cuda:0
     done
 fi
 

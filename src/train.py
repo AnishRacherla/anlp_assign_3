@@ -60,6 +60,9 @@ def evaluate_loss(model: nn.Module, loader, device: str) -> float:
             continue
         if labels is None:
             continue
+        if hasattr(model, "max_seq_len") and inputs.size(1) > model.max_seq_len:
+            inputs = inputs[:, : model.max_seq_len]
+            labels = labels[:, : model.max_seq_len]
         inputs = inputs.to(device)
         labels = labels.to(device)
         logits = model(inputs)
@@ -97,6 +100,12 @@ def train(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    print(f"Using device: {device}")
+    if str(device).startswith("cuda"):
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"CUDA was requested ({device}) but torch.cuda.is_available() is False!")
+        print(f"GPU device: {torch.cuda.get_device_name(device)}")
+
     tokenizer = CharTokenizer()
     vocab_size = tokenizer.vocab_size
 
@@ -118,7 +127,7 @@ def train(
         max_len=max_seq_len,
         shuffle=False,
         is_train=False,
-        max_samples=max_val_samples,
+        max_samples=max_val_samples or 1000,
     )
 
     model = get_model(
