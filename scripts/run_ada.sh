@@ -37,6 +37,26 @@ if ! command -v uv >/dev/null 2>&1; then
     fi
 fi
 
+# Load .env secrets if present
+if [ -f ".env" ]; then
+    set -a
+    source .env 2>/dev/null || true
+    set +a
+fi
+
+HF_REPO_ID="${HF_REPO_ID:-AnishRacherla/anlp-a3-models}"
+WANDB_PROJECT="${WANDB_PROJECT:-anlp-a3-part1}"
+
+HF_FLAGS=""
+if [ -n "$HF_REPO_ID" ]; then
+    HF_FLAGS="--push-to-hf --hf-repo-id $HF_REPO_ID"
+fi
+
+WANDB_FLAGS=""
+if [ -n "$WANDB_PROJECT" ]; then
+    WANDB_FLAGS="--wandb-project $WANDB_PROJECT"
+fi
+
 echo "=== uv version: $(uv --version) ==="
 
 # Sync virtual environment from pyproject.toml
@@ -79,7 +99,8 @@ if [ "$NUM_GPUS" -ge 2 ]; then
         echo "[GPU 0] Training Transformer..."
         CUDA_VISIBLE_DEVICES=0 uv run python -m src.train \
             --model-type transformer --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
-            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 $EXTRA_FLAGS > logs/part1/ada_gpu0_transformer.log 2>&1
+            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
+            $WANDB_FLAGS --wandb-run-name "transformer_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu0_transformer.log 2>&1
         echo "[GPU 0] Evaluating Transformer..."
         CUDA_VISIBLE_DEVICES=0 uv run python -m src.evaluate \
             --model-type transformer --checkpoint-path models/part1/transformer_best.pt \
@@ -88,7 +109,8 @@ if [ "$NUM_GPUS" -ge 2 ]; then
         echo "[GPU 0] Training Hybrid (Mamba-DeltaNet)..."
         CUDA_VISIBLE_DEVICES=0 uv run python -m src.train \
             --model-type hybrid --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
-            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 $EXTRA_FLAGS > logs/part1/ada_gpu0_hybrid.log 2>&1
+            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
+            $WANDB_FLAGS --wandb-run-name "hybrid_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu0_hybrid.log 2>&1
         echo "[GPU 0] Evaluating Hybrid..."
         CUDA_VISIBLE_DEVICES=0 uv run python -m src.evaluate \
             --model-type hybrid --checkpoint-path models/part1/hybrid_best.pt \
@@ -101,7 +123,8 @@ if [ "$NUM_GPUS" -ge 2 ]; then
         echo "[GPU 1] Training Mamba..."
         CUDA_VISIBLE_DEVICES=1 uv run python -m src.train \
             --model-type mamba --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
-            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 $EXTRA_FLAGS > logs/part1/ada_gpu1_mamba.log 2>&1
+            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
+            $WANDB_FLAGS --wandb-run-name "mamba_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu1_mamba.log 2>&1
         echo "[GPU 1] Evaluating Mamba..."
         CUDA_VISIBLE_DEVICES=1 uv run python -m src.evaluate \
             --model-type mamba --checkpoint-path models/part1/mamba_best.pt \
@@ -110,7 +133,8 @@ if [ "$NUM_GPUS" -ge 2 ]; then
         echo "[GPU 1] Training DeltaNet..."
         CUDA_VISIBLE_DEVICES=1 uv run python -m src.train \
             --model-type deltanet --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
-            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 $EXTRA_FLAGS > logs/part1/ada_gpu1_deltanet.log 2>&1
+            --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
+            $WANDB_FLAGS --wandb-run-name "deltanet_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu1_deltanet.log 2>&1
         echo "[GPU 1] Evaluating DeltaNet..."
         CUDA_VISIBLE_DEVICES=1 uv run python -m src.evaluate \
             --model-type deltanet --checkpoint-path models/part1/deltanet_best.pt \
@@ -132,7 +156,7 @@ else
             --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" \
             --device cuda:0 \
-            $EXTRA_FLAGS
+            $WANDB_FLAGS --wandb-run-name "${M}_ada" $HF_FLAGS $EXTRA_FLAGS
             
         echo "--- Evaluating $M ---"
         uv run python -m src.evaluate \
