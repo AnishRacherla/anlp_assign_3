@@ -9,12 +9,19 @@ set -e
 
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/AnishRacherla/anlp_assign_3.git}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
-HF_REPO_ID="${HF_REPO_ID:-}"
+HF_REPO_ID="${HF_REPO_ID:-AnishRacherla/anlp-a3-models}"
 WANDB_PROJECT="${WANDB_PROJECT:-anlp-a3-part1}"
+ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
 EPOCHS="${EPOCHS:-3}"
 BATCH_SIZE="${BATCH_SIZE:-16}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
 MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-25000}"
+
+if [ -f ".env" ]; then
+    set -a
+    source .env 2>/dev/null || true
+    set +a
+fi
 
 echo "=== System GPU Check ==="
 nvidia-smi
@@ -101,6 +108,7 @@ echo "=== Launching Dual-GPU Parallel Pipelines ==="
     if ! CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
         --model-type transformer \
         --checkpoint-path models/part1/transformer_best.pt \
+        --roll-number "$ROLL_NUMBER" \
         --device cuda:0 >> logs/part1/gpu0_transformer.log 2>&1; then
         echo "[GPU 0] ERROR: Transformer evaluation failed! Recent log:"
         tail -n 25 logs/part1/gpu0_transformer.log
@@ -127,6 +135,7 @@ echo "=== Launching Dual-GPU Parallel Pipelines ==="
     if ! CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
         --model-type hybrid \
         --checkpoint-path models/part1/hybrid_best.pt \
+        --roll-number "$ROLL_NUMBER" \
         --device cuda:0 >> logs/part1/gpu0_hybrid.log 2>&1; then
         echo "[GPU 0] ERROR: Hybrid evaluation failed! Recent log:"
         tail -n 25 logs/part1/gpu0_hybrid.log
@@ -161,6 +170,7 @@ PID_GPU0=$!
     if ! CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
         --model-type mamba \
         --checkpoint-path models/part1/mamba_best.pt \
+        --roll-number "$ROLL_NUMBER" \
         --device cuda:0 >> logs/part1/gpu1_mamba.log 2>&1; then
         echo "[GPU 1] ERROR: Mamba evaluation failed! Recent log:"
         tail -n 25 logs/part1/gpu1_mamba.log
@@ -187,6 +197,7 @@ PID_GPU0=$!
     if ! CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
         --model-type deltanet \
         --checkpoint-path models/part1/deltanet_best.pt \
+        --roll-number "$ROLL_NUMBER" \
         --device cuda:0 >> logs/part1/gpu1_deltanet.log 2>&1; then
         echo "[GPU 1] ERROR: DeltaNet evaluation failed! Recent log:"
         tail -n 25 logs/part1/gpu1_deltanet.log
