@@ -14,6 +14,8 @@ dependencies = [
     "editdistance>=0.8.0",
     "pyyaml>=6.0",
     "scipy>=1.11.0",
+    "nvidia-cudnn-cu12; sys_platform == 'linux'",
+    "nvidia-nccl-cu12; sys_platform == 'linux'",
 ]
 
 [[tool.uv.index]]

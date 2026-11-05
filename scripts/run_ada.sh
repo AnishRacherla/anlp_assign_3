@@ -62,9 +62,12 @@ echo "=== uv version: $(uv --version) ==="
 # Sync virtual environment from pyproject.toml
 echo "=== Syncing Environment via uv sync ==="
 uv sync
-uv pip install nvidia-cudnn-cu12 nvidia-nccl-cu12 nvidia-cublas-cu12
 
-SITE_PKG=$(uv run python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "")
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+fi
+
+SITE_PKG=$(python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "")
 if [ -n "$SITE_PKG" ]; then
     export LD_LIBRARY_PATH="$SITE_PKG/nvidia/cudnn/lib:$SITE_PKG/nvidia/nccl/lib:$SITE_PKG/nvidia/cublas/lib:$LD_LIBRARY_PATH"
 fi
@@ -76,7 +79,7 @@ if [ -n "$VENV_NVIDIA_LIBS" ]; then
 fi
 
 echo "=== Verifying CUDA Compatibility ==="
-uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
 
 mkdir -p logs/part1 models/part1 output/part1 results/part1
 
@@ -112,22 +115,22 @@ if [ "$NUM_GPUS" -ge 2 ]; then
     (
         set -e
         echo "[GPU 0] Training Transformer..."
-        CUDA_VISIBLE_DEVICES=0 uv run python -m src.train \
+        CUDA_VISIBLE_DEVICES=0 python -m src.train \
             --model-type transformer --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
             $WANDB_FLAGS --wandb-run-name "transformer_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu0_transformer.log 2>&1
         echo "[GPU 0] Evaluating Transformer..."
-        CUDA_VISIBLE_DEVICES=0 uv run python -m src.evaluate \
+        CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
             --model-type transformer --checkpoint-path models/part1/transformer_best.pt \
             --roll-number "$ROLL_NUMBER" --device cuda:0 >> logs/part1/ada_gpu0_transformer.log 2>&1
 
         echo "[GPU 0] Training Hybrid (Mamba-DeltaNet)..."
-        CUDA_VISIBLE_DEVICES=0 uv run python -m src.train \
+        CUDA_VISIBLE_DEVICES=0 python -m src.train \
             --model-type hybrid --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
             $WANDB_FLAGS --wandb-run-name "hybrid_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu0_hybrid.log 2>&1
         echo "[GPU 0] Evaluating Hybrid..."
-        CUDA_VISIBLE_DEVICES=0 uv run python -m src.evaluate \
+        CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
             --model-type hybrid --checkpoint-path models/part1/hybrid_best.pt \
             --roll-number "$ROLL_NUMBER" --device cuda:0 >> logs/part1/ada_gpu0_hybrid.log 2>&1
     ) &
@@ -136,22 +139,22 @@ if [ "$NUM_GPUS" -ge 2 ]; then
     (
         set -e
         echo "[GPU 1] Training Mamba..."
-        CUDA_VISIBLE_DEVICES=1 uv run python -m src.train \
+        CUDA_VISIBLE_DEVICES=1 python -m src.train \
             --model-type mamba --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
             $WANDB_FLAGS --wandb-run-name "mamba_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu1_mamba.log 2>&1
         echo "[GPU 1] Evaluating Mamba..."
-        CUDA_VISIBLE_DEVICES=1 uv run python -m src.evaluate \
+        CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
             --model-type mamba --checkpoint-path models/part1/mamba_best.pt \
             --roll-number "$ROLL_NUMBER" --device cuda:0 >> logs/part1/ada_gpu1_mamba.log 2>&1
 
         echo "[GPU 1] Training DeltaNet..."
-        CUDA_VISIBLE_DEVICES=1 uv run python -m src.train \
+        CUDA_VISIBLE_DEVICES=1 python -m src.train \
             --model-type deltanet --epochs "$EPOCHS" --batch-size "$BATCH_SIZE" \
             --max-seq-len "$MAX_SEQ_LEN" --device cuda:0 \
             $WANDB_FLAGS --wandb-run-name "deltanet_ada" $HF_FLAGS $EXTRA_FLAGS > logs/part1/ada_gpu1_deltanet.log 2>&1
         echo "[GPU 1] Evaluating DeltaNet..."
-        CUDA_VISIBLE_DEVICES=1 uv run python -m src.evaluate \
+        CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
             --model-type deltanet --checkpoint-path models/part1/deltanet_best.pt \
             --roll-number "$ROLL_NUMBER" --device cuda:0 >> logs/part1/ada_gpu1_deltanet.log 2>&1
     ) &
@@ -161,11 +164,11 @@ if [ "$NUM_GPUS" -ge 2 ]; then
     wait $PID_1
 else
     echo "=== Running Single-GPU Sequential Pipeline ==="
-    uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device count: {torch.cuda.device_count()}')"
+    python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, device count: {torch.cuda.device_count()}')"
     MODELS=("transformer" "mamba" "deltanet" "hybrid")
     for M in "${MODELS[@]}"; do
         echo "--- Training $M ---"
-        uv run python -m src.train \
+        python -m src.train \
             --model-type "$M" \
             --epochs "$EPOCHS" \
             --batch-size "$BATCH_SIZE" \
@@ -174,7 +177,7 @@ else
             $WANDB_FLAGS --wandb-run-name "${M}_ada" $HF_FLAGS $EXTRA_FLAGS
             
         echo "--- Evaluating $M ---"
-        uv run python -m src.evaluate \
+        python -m src.evaluate \
             --model-type "$M" \
             --checkpoint-path "models/part1/${M}_best.pt" \
             --roll-number "$ROLL_NUMBER" \
