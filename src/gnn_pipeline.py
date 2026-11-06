@@ -153,7 +153,8 @@ def run_experiment_across_seeds(
     in_channels = train_data.num_features
 
     seed_results = []
-    for s in seeds:
+    for idx, s in enumerate(seeds):
+        print(f"  [Seed {s} ({idx+1}/{len(seeds)})] Training {model_name.upper()}...")
         res = train_single_run(
             model_name=model_name,
             train_loader=train_loader,
@@ -165,6 +166,7 @@ def run_experiment_across_seeds(
             device=device,
             seed=s,
         )
+        print(f"    Seed {s} Test F1: {res['f1']:.4f}, Acc: {res['accuracy']:.4f}")
         seed_results.append(res)
 
     means = {}

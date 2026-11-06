@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, GCNConv, SAGEConv, global_max_pool
+from torch_geometric.nn import GATConv, GCNConv, SAGEConv, global_mean_pool
 
 def extract_root_features(x: torch.Tensor, batch: torch.Tensor, ptr: Optional[torch.Tensor] = None) -> torch.Tensor:
     if ptr is not None:
@@ -38,7 +38,7 @@ class GCNClassifier(nn.Module):
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, ptr: Optional[torch.Tensor] = None) -> torch.Tensor:
         h = self.drop(F.relu(self.conv1(x, edge_index)))
         h = self.drop(F.relu(self.conv2(h, edge_index)))
-        pooled = global_max_pool(h, batch)
+        pooled = global_mean_pool(h, batch)
         root_x = extract_root_features(x, batch, ptr)
         news = F.relu(self.lin0(root_x))
         out = self.drop(F.relu(self.lin1(torch.cat([news, pooled], dim=-1))))
@@ -57,7 +57,7 @@ class SAGEClassifier(nn.Module):
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, ptr: Optional[torch.Tensor] = None) -> torch.Tensor:
         h = self.drop(F.relu(self.conv1(x, edge_index)))
         h = self.drop(F.relu(self.conv2(h, edge_index)))
-        pooled = global_max_pool(h, batch)
+        pooled = global_mean_pool(h, batch)
         root_x = extract_root_features(x, batch, ptr)
         news = F.relu(self.lin0(root_x))
         out = self.drop(F.relu(self.lin1(torch.cat([news, pooled], dim=-1))))
@@ -76,7 +76,7 @@ class GATClassifier(nn.Module):
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, ptr: Optional[torch.Tensor] = None) -> torch.Tensor:
         h = self.drop(F.elu(self.conv1(x, edge_index)))
         h = self.drop(F.elu(self.conv2(h, edge_index)))
-        pooled = global_max_pool(h, batch)
+        pooled = global_mean_pool(h, batch)
         root_x = extract_root_features(x, batch, ptr)
         news = F.relu(self.lin0(root_x))
         out = self.drop(F.relu(self.lin1(torch.cat([news, pooled], dim=-1))))
@@ -98,11 +98,11 @@ class BiGCNClassifier(nn.Module):
         rev_edge_index = edge_index[[1, 0]]
         td_h = self.drop(F.relu(self.td_conv1(x, edge_index)))
         td_h = self.drop(F.relu(self.td_conv2(td_h, edge_index)))
-        td_pooled = global_max_pool(td_h, batch)
+        td_pooled = global_mean_pool(td_h, batch)
 
         bu_h = self.drop(F.relu(self.bu_conv1(x, rev_edge_index)))
         bu_h = self.drop(F.relu(self.bu_conv2(bu_h, rev_edge_index)))
-        bu_pooled = global_max_pool(bu_h, batch)
+        bu_pooled = global_mean_pool(bu_h, batch)
 
         root_x = extract_root_features(x, batch, ptr)
         news = F.relu(self.lin0(root_x))
