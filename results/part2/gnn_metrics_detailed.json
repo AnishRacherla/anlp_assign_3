@@ -2,130 +2,130 @@
   "part_a": {
     "mlp": {
       "mean": {
-        "accuracy": 0.7286,
-        "precision": 0.7274,
-        "recall": 0.735,
-        "f1": 0.7305
+        "accuracy": 0.727,
+        "precision": 0.729,
+        "recall": 0.7255,
+        "f1": 0.7267
       },
       "std": {
-        "accuracy": 0.0073,
-        "precision": 0.0187,
-        "recall": 0.0248,
-        "f1": 0.006
+        "accuracy": 0.004,
+        "precision": 0.0164,
+        "recall": 0.0271,
+        "f1": 0.0061
       }
     },
     "gcn": {
       "mean": {
-        "accuracy": 0.9298,
-        "precision": 0.9289,
-        "recall": 0.9315,
-        "f1": 0.93
+        "accuracy": 0.9541,
+        "precision": 0.9559,
+        "recall": 0.9523,
+        "f1": 0.954
       },
       "std": {
-        "accuracy": 0.0063,
-        "precision": 0.015,
-        "recall": 0.0152,
-        "f1": 0.0062
+        "accuracy": 0.0039,
+        "precision": 0.0075,
+        "recall": 0.0135,
+        "f1": 0.0043
       }
     },
     "sage": {
       "mean": {
-        "accuracy": 0.9319,
-        "precision": 0.94,
-        "recall": 0.9236,
-        "f1": 0.9314
+        "accuracy": 0.9461,
+        "precision": 0.9459,
+        "recall": 0.9467,
+        "f1": 0.9462
       },
       "std": {
-        "accuracy": 0.005,
-        "precision": 0.018,
-        "recall": 0.0155,
-        "f1": 0.0046
+        "accuracy": 0.0018,
+        "precision": 0.0118,
+        "recall": 0.0121,
+        "f1": 0.0017
       }
     },
     "gat": {
       "mean": {
-        "accuracy": 0.9674,
-        "precision": 0.9666,
-        "recall": 0.9686,
-        "f1": 0.9675
+        "accuracy": 0.9651,
+        "precision": 0.966,
+        "recall": 0.9643,
+        "f1": 0.9651
       },
       "std": {
-        "accuracy": 0.0031,
-        "precision": 0.009,
-        "recall": 0.0107,
-        "f1": 0.0032
+        "accuracy": 0.0062,
+        "precision": 0.0023,
+        "recall": 0.0108,
+        "f1": 0.0064
       }
     },
     "bigcn": {
       "mean": {
-        "accuracy": 0.9518,
-        "precision": 0.9496,
-        "recall": 0.9544,
-        "f1": 0.952
+        "accuracy": 0.9591,
+        "precision": 0.9543,
+        "recall": 0.9646,
+        "f1": 0.9594
       },
       "std": {
-        "accuracy": 0.0062,
-        "precision": 0.0097,
-        "recall": 0.005,
-        "f1": 0.006
+        "accuracy": 0.0069,
+        "precision": 0.0117,
+        "recall": 0.0068,
+        "f1": 0.0067
       }
     }
   },
   "part_b": {
     "profile": {
       "mean": {
-        "accuracy": 0.9129,
-        "precision": 0.9383,
-        "recall": 0.8844,
-        "f1": 0.9104
+        "accuracy": 0.9518,
+        "precision": 0.953,
+        "recall": 0.9506,
+        "f1": 0.9517
       },
       "std": {
-        "accuracy": 0.0061,
-        "precision": 0.0058,
-        "recall": 0.019,
-        "f1": 0.0074
+        "accuracy": 0.0054,
+        "precision": 0.005,
+        "recall": 0.0118,
+        "f1": 0.0056
       }
     },
     "spacy": {
       "mean": {
-        "accuracy": 0.9393,
-        "precision": 0.9378,
-        "recall": 0.9412,
-        "f1": 0.9395
+        "accuracy": 0.943,
+        "precision": 0.943,
+        "recall": 0.9436,
+        "f1": 0.9431
       },
       "std": {
-        "accuracy": 0.0017,
-        "precision": 0.0028,
-        "recall": 0.0042,
-        "f1": 0.0018
+        "accuracy": 0.0048,
+        "precision": 0.0143,
+        "recall": 0.0179,
+        "f1": 0.0051
       }
     },
     "bert": {
       "mean": {
-        "accuracy": 0.9319,
-        "precision": 0.94,
-        "recall": 0.9236,
-        "f1": 0.9314
+        "accuracy": 0.9461,
+        "precision": 0.9459,
+        "recall": 0.9467,
+        "f1": 0.9462
       },
       "std": {
-        "accuracy": 0.005,
-        "precision": 0.018,
-        "recall": 0.0155,
-        "f1": 0.0046
+        "accuracy": 0.0018,
+        "precision": 0.0118,
+        "recall": 0.0121,
+        "f1": 0.0017
       }
     },
     "content": {
       "mean": {
-        "accuracy": 0.7687,
-        "precision": 0.758,
-        "recall": 0.9811,
-        "f1": 0.836
+        "accuracy": 0.9662,
+        "precision": 0.9689,
+        "recall": 0.9636,
+        "f1": 0.9662
       },
       "std": {
-        "accuracy": 0.2188,
-        "precision": 0.2101,
-        "recall": 0.0159,
-        "f1": 0.1378
+        "accuracy": 0.0018,
+        "precision": 0.0078,
+        "recall": 0.0081,
+        "f1": 0.0018
       }
     }
   }
