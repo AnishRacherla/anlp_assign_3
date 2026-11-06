@@ -101,7 +101,7 @@ def train_single_run(
     weight_decay: float = 0.001,
     device: str = "cpu",
     seed: int = 42,
-) -> Dict[str, float]:
+) -> Tuple[Dict[str, float], float]:
     set_seed(seed)
     model = build_gnn_model(model_name, in_channels=in_channels).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -118,6 +118,7 @@ def train_single_run(
             logits = model(batch.x, batch.edge_index, batch.batch, ptr=ptr)
             loss = F.cross_entropy(logits, batch.y)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
         val_metrics = evaluate_gnn(model, val_loader, device)
@@ -129,7 +130,7 @@ def train_single_run(
         model.load_state_dict(best_weights)
 
     test_metrics = evaluate_gnn(model, test_loader, device)
-    return test_metrics
+    return test_metrics, best_val_f1
 
 def run_experiment_across_seeds(
     model_name: str,
@@ -146,6 +147,16 @@ def run_experiment_across_seeds(
     val_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="val", transform=transform)
     test_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="test", transform=transform)
 
+    train_x = train_data._data.x if hasattr(train_data, "_data") else train_data.data.x
+    feat_mean = train_x.mean(dim=0, keepdim=True)
+    feat_std = train_x.std(dim=0, keepdim=True).clamp(min=1e-5)
+
+    for ds in [train_data, val_data, test_data]:
+        if hasattr(ds, "_data") and hasattr(ds._data, "x"):
+            ds._data.x = (ds._data.x - feat_mean) / feat_std
+        elif hasattr(ds, "data") and hasattr(ds.data, "x"):
+            ds.data.x = (ds.data.x - feat_mean) / feat_std
+
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
@@ -155,7 +166,7 @@ def run_experiment_across_seeds(
     seed_results = []
     for idx, s in enumerate(seeds):
         print(f"  [Seed {s} ({idx+1}/{len(seeds)})] Training {model_name.upper()}...")
-        res = train_single_run(
+        res, best_val_f1 = train_single_run(
             model_name=model_name,
             train_loader=train_loader,
             val_loader=val_loader,
@@ -166,15 +177,21 @@ def run_experiment_across_seeds(
             device=device,
             seed=s,
         )
-        print(f"    Seed {s} Test F1: {res['f1']:.4f}, Acc: {res['accuracy']:.4f}")
+        print(f"    Seed {s} Val F1: {best_val_f1:.4f} | Test F1: {res['f1']:.4f}, Acc: {res['accuracy']:.4f}")
         seed_results.append(res)
+        if _HAS_WANDB and wandb.run is not None:
+            wandb.log({
+                f"{model_name}_{feature_name}/seed_{s}_val_f1": best_val_f1,
+                f"{model_name}_{feature_name}/seed_{s}_test_f1": res["f1"],
+                f"{model_name}_{feature_name}/seed_{s}_test_acc": res["accuracy"],
+            })
 
     means = {}
     stds = {}
     for metric_key in ["accuracy", "precision", "recall", "f1"]:
         vals = [r[metric_key] for r in seed_results]
         means[metric_key] = round(float(np.mean(vals)), 4)
-        stds[metric_key] = round(float(np.std(vals)), 4)
+        stds[metric_key] = round(float(np.std(vals, ddof=1)), 4)
 
     return means, stds
 
@@ -188,6 +205,13 @@ def run_all(
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
+    if wb_proj and _HAS_WANDB:
+        key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
+        if key:
+            wandb.login(key=key)
+        wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
 
     root_dir = "data/part2/upfd"
     out_dir = Path("output/part2")
@@ -229,7 +253,7 @@ def run_all(
         results_template["part_a"][m] = means
         detailed_report["part_a"][m] = {"mean": means, "std": stds}
         print(f"  {m.upper()} Mean: {means}")
-        print(f"  {m.upper()} Std:  {stds}")
+        print(f"  {m.upper()} Std (ddof=1):  {stds}")
 
     features_part_b = ["profile", "spacy", "bert", "content"]
     for f in features_part_b:
@@ -255,7 +279,7 @@ def run_all(
         results_template["part_b"][f] = means
         detailed_report["part_b"][f] = {"mean": means, "std": stds}
         print(f"  GraphSAGE ({f.upper()}) Mean: {means}")
-        print(f"  GraphSAGE ({f.upper()}) Std:  {stds}")
+        print(f"  GraphSAGE ({f.upper()}) Std (ddof=1):  {stds}")
 
     target_json = out_dir / ("results_ta.json" if ta_mode else "results.json")
     with open(target_json, "w", encoding="utf-8") as f_out:
@@ -288,12 +312,7 @@ def run_all(
         print(f"{f.upper():<10} | {mean['accuracy']*100:.2f} ± {std['accuracy']*100:.2f}%     | {mean['precision']*100:.2f} ± {std['precision']*100:.2f}%     | {mean['recall']*100:.2f} ± {std['recall']*100:.2f}%     | {mean['f1']*100:.2f} ± {std['f1']*100:.2f}%")
     print("=" * 60)
 
-    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
-    if wb_proj and _HAS_WANDB:
-        key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
-        if key:
-            wandb.login(key=key)
-        wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
+    if wb_proj and _HAS_WANDB and wandb.run is not None:
         for m, vals in results_template["part_a"].items():
             for metric_k, metric_v in vals.items():
                 wandb.log({f"arch_{m}/{metric_k}": metric_v})
