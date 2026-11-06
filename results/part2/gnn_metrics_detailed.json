@@ -1,0 +1,132 @@
+{
+  "part_a": {
+    "mlp": {
+      "mean": {
+        "accuracy": 0.7286,
+        "precision": 0.7274,
+        "recall": 0.735,
+        "f1": 0.7305
+      },
+      "std": {
+        "accuracy": 0.0073,
+        "precision": 0.0187,
+        "recall": 0.0248,
+        "f1": 0.006
+      }
+    },
+    "gcn": {
+      "mean": {
+        "accuracy": 0.9298,
+        "precision": 0.9289,
+        "recall": 0.9315,
+        "f1": 0.93
+      },
+      "std": {
+        "accuracy": 0.0063,
+        "precision": 0.015,
+        "recall": 0.0152,
+        "f1": 0.0062
+      }
+    },
+    "sage": {
+      "mean": {
+        "accuracy": 0.9319,
+        "precision": 0.94,
+        "recall": 0.9236,
+        "f1": 0.9314
+      },
+      "std": {
+        "accuracy": 0.005,
+        "precision": 0.018,
+        "recall": 0.0155,
+        "f1": 0.0046
+      }
+    },
+    "gat": {
+      "mean": {
+        "accuracy": 0.9674,
+        "precision": 0.9666,
+        "recall": 0.9686,
+        "f1": 0.9675
+      },
+      "std": {
+        "accuracy": 0.0031,
+        "precision": 0.009,
+        "recall": 0.0107,
+        "f1": 0.0032
+      }
+    },
+    "bigcn": {
+      "mean": {
+        "accuracy": 0.9518,
+        "precision": 0.9496,
+        "recall": 0.9544,
+        "f1": 0.952
+      },
+      "std": {
+        "accuracy": 0.0062,
+        "precision": 0.0097,
+        "recall": 0.005,
+        "f1": 0.006
+      }
+    }
+  },
+  "part_b": {
+    "profile": {
+      "mean": {
+        "accuracy": 0.9129,
+        "precision": 0.9383,
+        "recall": 0.8844,
+        "f1": 0.9104
+      },
+      "std": {
+        "accuracy": 0.0061,
+        "precision": 0.0058,
+        "recall": 0.019,
+        "f1": 0.0074
+      }
+    },
+    "spacy": {
+      "mean": {
+        "accuracy": 0.9393,
+        "precision": 0.9378,
+        "recall": 0.9412,
+        "f1": 0.9395
+      },
+      "std": {
+        "accuracy": 0.0017,
+        "precision": 0.0028,
+        "recall": 0.0042,
+        "f1": 0.0018
+      }
+    },
+    "bert": {
+      "mean": {
+        "accuracy": 0.9319,
+        "precision": 0.94,
+        "recall": 0.9236,
+        "f1": 0.9314
+      },
+      "std": {
+        "accuracy": 0.005,
+        "precision": 0.018,
+        "recall": 0.0155,
+        "f1": 0.0046
+      }
+    },
+    "content": {
+      "mean": {
+        "accuracy": 0.7687,
+        "precision": 0.758,
+        "recall": 0.9811,
+        "f1": 0.836
+      },
+      "std": {
+        "accuracy": 0.2188,
+        "precision": 0.2101,
+        "recall": 0.0159,
+        "f1": 0.1378
+      }
+    }
+  }
+}

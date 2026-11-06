@@ -1,0 +1,60 @@
+{
+  "part_a": {
+    "mlp": {
+      "accuracy": 0.7286,
+      "precision": 0.7274,
+      "recall": 0.735,
+      "f1": 0.7305
+    },
+    "gcn": {
+      "accuracy": 0.9298,
+      "precision": 0.9289,
+      "recall": 0.9315,
+      "f1": 0.93
+    },
+    "sage": {
+      "accuracy": 0.9319,
+      "precision": 0.94,
+      "recall": 0.9236,
+      "f1": 0.9314
+    },
+    "gat": {
+      "accuracy": 0.9674,
+      "precision": 0.9666,
+      "recall": 0.9686,
+      "f1": 0.9675
+    },
+    "bigcn": {
+      "accuracy": 0.9518,
+      "precision": 0.9496,
+      "recall": 0.9544,
+      "f1": 0.952
+    }
+  },
+  "part_b": {
+    "profile": {
+      "accuracy": 0.9129,
+      "precision": 0.9383,
+      "recall": 0.8844,
+      "f1": 0.9104
+    },
+    "spacy": {
+      "accuracy": 0.9393,
+      "precision": 0.9378,
+      "recall": 0.9412,
+      "f1": 0.9395
+    },
+    "bert": {
+      "accuracy": 0.9319,
+      "precision": 0.94,
+      "recall": 0.9236,
+      "f1": 0.9314
+    },
+    "content": {
+      "accuracy": 0.7687,
+      "precision": 0.758,
+      "recall": 0.9811,
+      "f1": 0.836
+    }
+  }
+}
