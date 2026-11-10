@@ -25,6 +25,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import ToUndirected
 
 from .gnn_models import build_gnn_model
+from .hub import load_env
 
 try:
     import wandb
@@ -231,15 +232,22 @@ def run_all(
     push_to_hf: bool = False,
     hf_repo_id: str = "AnishRacherla/anlp-a3-models",
 ):
+    load_env()
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
+    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT") or "anlp-a3-part2"
     if wb_proj and _HAS_WANDB:
         key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
         if key:
-            wandb.login(key=key)
-        wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
+            try:
+                wandb.login(key=key)
+            except Exception:
+                pass
+        try:
+            wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
+        except Exception:
+            pass
 
     root_dir = "data/part2/upfd"
     out_dir = Path("output/part2")
@@ -360,7 +368,7 @@ def parse_args():
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--device", type=str, default=None)
-    p.add_argument("--wandb-project", type=str, default=None)
+    p.add_argument("--wandb-project", type=str, default="anlp-a3-part2")
     p.add_argument("--push-to-hf", action="store_true")
     p.add_argument("--hf-repo-id", type=str, default="AnishRacherla/anlp-a3-models")
     return p.parse_args()
