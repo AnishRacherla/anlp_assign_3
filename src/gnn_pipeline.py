@@ -101,7 +101,7 @@ def train_single_run(
     weight_decay: float = 0.001,
     device: str = "cpu",
     seed: int = 42,
-) -> Tuple[Dict[str, float], float]:
+) -> Tuple[Dict[str, float], float, dict]:
     set_seed(seed)
     model = build_gnn_model(model_name, in_channels=in_channels).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -130,7 +130,7 @@ def train_single_run(
         model.load_state_dict(best_weights)
 
     test_metrics = evaluate_gnn(model, test_loader, device)
-    return test_metrics, best_val_f1
+    return test_metrics, best_val_f1, best_weights
 
 def run_experiment_across_seeds(
     model_name: str,
@@ -141,6 +141,8 @@ def run_experiment_across_seeds(
     device: str,
     seeds: List[int],
     lr: float = 0.005,
+    push_to_hf: bool = False,
+    hf_repo_id: str = "AnishRacherla/anlp-a3-models",
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     transform = None if model_name.lower() == "bigcn" else ToUndirected()
     train_data = UPFD(root=root_data_dir, name="gossipcop", feature=feature_name, split="train", transform=transform)
@@ -164,9 +166,12 @@ def run_experiment_across_seeds(
     in_channels = train_data.num_features
 
     seed_results = []
+    best_overall_val_f1 = -1.0
+    best_overall_weights = None
+
     for idx, s in enumerate(seeds):
         print(f"  [Seed {s} ({idx+1}/{len(seeds)})] Training {model_name.upper()}...")
-        res, best_val_f1 = train_single_run(
+        res, best_val_f1, weights = train_single_run(
             model_name=model_name,
             train_loader=train_loader,
             val_loader=val_loader,
@@ -177,6 +182,10 @@ def run_experiment_across_seeds(
             device=device,
             seed=s,
         )
+        if best_val_f1 > best_overall_val_f1:
+            best_overall_val_f1 = best_val_f1
+            best_overall_weights = copy.deepcopy(weights)
+
         print(f"    Seed {s} Val F1: {best_val_f1:.4f} | Test F1: {res['f1']:.4f}, Acc: {res['accuracy']:.4f}")
         seed_results.append(res)
         if _HAS_WANDB and wandb.run is not None:
@@ -185,6 +194,23 @@ def run_experiment_across_seeds(
                 f"{model_name}_{feature_name}/seed_{s}_test_f1": res["f1"],
                 f"{model_name}_{feature_name}/seed_{s}_test_acc": res["accuracy"],
             })
+
+    ckpt_dir = Path("models/part2")
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = ckpt_dir / f"{model_name}_{feature_name}_best.pt"
+    if best_overall_weights is not None:
+        torch.save(best_overall_weights, ckpt_path)
+        print(f"  Saved best checkpoint to: {ckpt_path}")
+        if push_to_hf:
+            try:
+                from .hub import push_to_hub
+                push_to_hub(
+                    local_path=str(ckpt_path),
+                    repo_id=hf_repo_id,
+                    filename=f"part2_{model_name}_{feature_name}_best.pt",
+                )
+            except Exception as e:
+                print(f"  Warning: Hugging Face upload failed: {e}")
 
     means = {}
     stds = {}
@@ -202,6 +228,8 @@ def run_all(
     lr: float = 0.005,
     device: Optional[str] = None,
     wandb_project: Optional[str] = None,
+    push_to_hf: bool = False,
+    hf_repo_id: str = "AnishRacherla/anlp-a3-models",
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -249,6 +277,8 @@ def run_all(
             lr=lr,
             device=device,
             seeds=SEEDS,
+            push_to_hf=push_to_hf,
+            hf_repo_id=hf_repo_id,
         )
         results_template["part_a"][m] = means
         detailed_report["part_a"][m] = {"mean": means, "std": stds}
@@ -275,6 +305,8 @@ def run_all(
             lr=lr,
             device=device,
             seeds=SEEDS,
+            push_to_hf=push_to_hf,
+            hf_repo_id=hf_repo_id,
         )
         results_template["part_b"][f] = means
         detailed_report["part_b"][f] = {"mean": means, "std": stds}
@@ -329,6 +361,8 @@ def parse_args():
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--device", type=str, default=None)
     p.add_argument("--wandb-project", type=str, default=None)
+    p.add_argument("--push-to-hf", action="store_true")
+    p.add_argument("--hf-repo-id", type=str, default="AnishRacherla/anlp-a3-models")
     return p.parse_args()
 
 if __name__ == "__main__":
@@ -340,4 +374,6 @@ if __name__ == "__main__":
         lr=args.lr,
         device=args.device,
         wandb_project=args.wandb_project,
+        push_to_hf=args.push_to_hf,
+        hf_repo_id=args.hf_repo_id,
     )

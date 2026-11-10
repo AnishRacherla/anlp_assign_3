@@ -33,3 +33,8 @@ wandb/
 # Outputs (preserve .gitkeep)
 output/*
 !output/**/.gitkeep
+
+# Scratch and diagnosis scripts
+scratch_*.py
+diagnose_cipher.py
+*.zip

@@ -39,3 +39,4 @@ with open(SRC, encoding="utf-8") as f, \
             raw_i += 1
         fc.write(json.dumps({"id": rec["id"], "ciphertext": "".join(out)}) + "\n")
         fp.write(json.dumps({"id": rec["id"], "text": text}) + "\n")
+

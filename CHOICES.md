@@ -134,29 +134,31 @@ All four architectures are constructed under a matched parameter budget:
 - **Checkpoint Selection:** The model checkpoint achieving the highest validation macro $F_1$ score during training is selected for final test set evaluation.
 
 ### 3.2 Part A: Architecture Comparison (Fixed BERT-768 Node Features)
-Across all models, input node features are fixed to 768-dimensional pretrained contextual BERT embeddings:
+Across all models, input node features are fixed to 768-dimensional pretrained contextual BERT embeddings. In strict accordance with General Instruction 1 ("implement the models from scratch in PyTorch"), all graph convolution operations (`GCNConv`, `SAGEConv`, `GATConv`, `BiGCNConv`) are implemented entirely from scratch in pure PyTorch using raw tensor scatter and matrix multiplication, with zero reliance on library layers:
 1. **Root-Only MLP (`RootMLP`):**
    - Two-layer feed-forward network reading exclusively the root node embedding (the initial news tweet), completely ignoring the propagation tree topology.
    - Serves as the crucial inductive baseline to assess whether graph structural information contributes beyond pure linguistic content of the source post.
 2. **Graph Convolutional Network (`GCNClassifier`):**
-   - 2-layer GCN (Kipf & Welling, 2017) using symmetric normalized neighborhood aggregation:
+   - 2-layer canonical GCN (Kipf & Welling, 2017) implemented from scratch:
      $$\mathbf{h}_v^{(l+1)} = \sigma \left( \sum_{u \in \mathcal{N}(v) \cup \{v\}} \frac{1}{\sqrt{\tilde{d}_v \tilde{d}_u}} \mathbf{h}_u^{(l)} \mathbf{W}^{(l)} \right)$$
    - Followed by global mean pooling across all nodes in the propagation tree and a linear classification head.
 3. **GraphSAGE (`SAGEClassifier`):**
-   - 2-layer GraphSAGE (Hamilton et al., 2017) using inductive mean neighborhood aggregation:
+   - 2-layer canonical GraphSAGE (Hamilton et al., 2017) implemented from scratch using inductive mean neighborhood aggregation:
      $$\mathbf{h}_v^{(l+1)} = \sigma \left( \mathbf{W}_1^{(l)} \mathbf{h}_v^{(l)} + \mathbf{W}_2^{(l)} \cdot \text{MEAN}_{u \in \mathcal{N}(v)} \mathbf{h}_u^{(l)} \right)$$
    - Followed by global mean pooling across all cascade nodes and a classification head.
 4. **Graph Attention Network (`GATClassifier`):**
-   - 2-layer GAT (Veličković et al., 2018) with multi-head self-attention ($H=4$ heads) learning dynamic, data-dependent edge weights along propagation paths:
+   - 2-layer canonical GAT (Veličković et al., 2018) implemented from scratch with multi-head self-attention learning dynamic, data-dependent edge weights along propagation paths:
      $$\alpha_{vu} = \text{softmax}_u \left( \text{LeakyReLU} \left( \mathbf{a}^T [\mathbf{W} \mathbf{h}_v \,\|\, \mathbf{W} \mathbf{h}_u] \right) \right)$$
    - Followed by global mean pooling and a classification head.
 5. **Bidirectional Graph Convolutional Network (`BiGCNClassifier`):**
-   - Implements bidirectional propagation modeling (Bian et al., 2020) tailored specifically for rumor/news tree cascades:
-     - **Top-Down GCN:** Operates on the original directed cascade $G$ (edges pointing from source to retweeters) to capture information spreading patterns.
+   - Implemented per Equations 6–8 of Bian et al. (AAAI 2020) with Root Feature Enhancement and DropEdge:
+     - **Top-Down GCN:** Operates on the directed cascade $G$ (edges pointing from source to retweeters) to capture information spreading patterns.
      - **Bottom-Up GCN:** Operates on the reversed graph $G^T$ (edges pointing from retweeters toward parent tweets) to aggregate community feedback and skepticism.
-   - **Representation Fusion:** Concatenates global mean pooled representations of the top-down tree, bottom-up tree, and the root tweet embedding:
-     $$\mathbf{z} = [\mathbf{h}_{\text{root}} \,\|\, \text{GlobalMeanPool}(\mathbf{H}_{\text{TD}}) \,\|\, \text{GlobalMeanPool}(\mathbf{H}_{\text{BU}})]$$
-   - Projected through an MLP classification head.
+     - **Root Feature Enhancement (Eqs. 6–8):** At every layer, the root news embedding $\mathbf{x}_{\text{root}}$ is explicitly concatenated with the node representations before convolution:
+       $$\tilde{\mathbf{H}}^{(l)} = [\mathbf{H}^{(l)} \,\|\, \mathbf{X}_{\text{root}}]$$
+     - **DropEdge Regularization:** Randomly drops a fraction ($p = 0.2$) of edges during training to prevent oversmoothing and improve cascade generalization.
+   - Global mean pooled representations from both branches are concatenated and projected through an MLP classification head:
+     $$\mathbf{z} = [\text{GlobalMeanPool}(\mathbf{H}_{\text{TD}}) \,\|\, \text{GlobalMeanPool}(\mathbf{H}_{\text{BU}})]$$
 
 ### 3.3 Part B: Feature Ablation (Fixed GraphSAGE Classifier)
 Evaluates GraphSAGE across four distinct node feature representations:
@@ -164,6 +166,14 @@ Evaluates GraphSAGE across four distinct node feature representations:
 2. **`spacy` (300 dims):** 300-dimensional Word2Vec static lexical representations of tweet texts.
 3. **`bert` (768 dims):** Contextual transformer sentence embeddings of post text.
 4. **`content` (310 dims):** Combined representation fusing 10-dimensional user profile metadata with 300-dimensional linguistic features.
+
+### 3.4 Numerical Stability, Standardization & Hugging Face Checkpointing
+- **Feature Standardization (Zero Data Leakage):** Features are standardized using the empirical mean and standard deviation computed strictly from the training split:
+  $$\hat{\mathbf{x}} = \frac{\mathbf{x} - \boldsymbol{\mu}_{\text{train}}}{\boldsymbol{\sigma}_{\text{train}} + 10^{-5}}$$
+  This is applied identically across all four feature types (`profile`, `spacy`, `bert`, `content`), preventing gradient explosion in heterogeneous multi-modal features.
+- **Gradient Clipping:** Gradients are clipped to a maximum $L_2$ norm of $1.0$ during training.
+- **Sample Standard Deviation ($N-1$ Convention):** In accordance with academic reporting standards, all metrics over the 5 random seeds are reported as $\text{mean} \pm \text{std}$ using Bessel's correction (`ddof=1`, dividing by $N-1$).
+- **Hugging Face Hub & Local Checkpointing:** Best-performing model checkpoints are saved locally to `models/part2/{model}_{feature}_best.pt` and synchronized to Hugging Face (`AnishRacherla/anlp-a3-models`) via `--push-to-hf`.
 
 ### 3.4 Output Formatting & Adherence
 - Results are saved to `output/part2/results.json` adhering strictly to the schema of `results_template.json` (reporting `accuracy`, `precision`, `recall`, `f1`).
