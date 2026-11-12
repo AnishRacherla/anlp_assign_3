@@ -73,24 +73,26 @@ class DeltaRuleLinearAttention(nn.Module):
         v = v.float()
         beta = beta.float()
 
-        s = torch.zeros(b, h, d_h, d_h, device=x.device, dtype=torch.float32)
-        outputs = []
+        B = b * h
+        q_f = q.reshape(B, l, d_h)
+        k_f = k.reshape(B, l, d_h)
+        v_f = v.reshape(B, l, d_h)
+        beta_f = beta.reshape(B, l, 1, 1)
+
+        s = torch.zeros(B, d_h, d_h, device=x.device, dtype=torch.float32)
+        out = torch.empty(B, l, d_h, device=x.device, dtype=x.dtype)
         for t in range(l):
-            q_t = q[:, :, t]
-            k_t = k[:, :, t]
-            v_t = v[:, :, t]
-            beta_t = beta[:, :, t]
+            kt = k_f[:, t].unsqueeze(-1)
+            vt = v_f[:, t].unsqueeze(-1)
+            qt = q_f[:, t].unsqueeze(-1)
+            bt = beta_f[:, t]
 
-            v_pred = torch.einsum("bhij,bhj->bhi", s, k_t)
-            err = v_t - v_pred
-            update = torch.einsum("bhi,bhj->bhij", err, k_t)
-            s = s + beta_t.unsqueeze(-1) * update
+            v_pred = torch.bmm(s, kt)
+            err = vt - v_pred
+            s = s + bt * torch.bmm(err, kt.transpose(1, 2))
+            out[:, t] = torch.bmm(s, qt).squeeze(-1)
 
-            o_t = torch.einsum("bhij,bhj->bhi", s, q_t)
-            outputs.append(o_t)
-
-        out = torch.stack(outputs, dim=2).to(x.dtype)
-        out = out.transpose(1, 2).contiguous().view(b, l, h * d_h)
+        out = out.reshape(b, h, l, d_h).transpose(1, 2).contiguous().view(b, l, h * d_h)
         return self.out_proj(out)
 
 class DeltaNetLayer(nn.Module):
