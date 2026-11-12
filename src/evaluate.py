@@ -85,7 +85,7 @@ def run_evaluation(
     split: str = "test",
     heldout: bool = False,
     heldout_path: str = "data/part1/heldout",
-    roll_number: str = "2023XXXX",
+    roll_number: str = "2024101046",
     output_dir: str = "output/part1",
     results_dir: str = "results/part1",
     hf_repo_id: Optional[str] = None,
@@ -219,7 +219,7 @@ def parse_args():
     p.add_argument("--split", type=str, default="test")
     p.add_argument("--heldout", action="store_true")
     p.add_argument("--heldout-path", type=str, default="data/part1/heldout")
-    p.add_argument("--roll-number", type=str, default="2023XXXX")
+    p.add_argument("--roll-number", type=str, default="2024101046")
     p.add_argument("--output-dir", type=str, default="output/part1")
     p.add_argument("--results-dir", type=str, default="results/part1")
     p.add_argument("--hf-repo-id", type=str, default="AnishRacherla/anlp-a3-models")

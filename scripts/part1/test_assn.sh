@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
+ROLL_NUMBER="${ROLL_NUMBER:-2024101046}"
 HF_REPO_ID="${HF_REPO_ID:-AnishRacherla/anlp-a3-models}"
 
 EXTRA_ARGS=()

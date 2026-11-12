@@ -170,3 +170,4 @@ def triton_selective_scan(
         out.stride(2),
     )
     return out.to(u.dtype)
+
