@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .triton_ops import triton_rmsnorm, triton_selective_scan
 from .vocab import decode_target_sequence, NOISE_TARGET_ID
 
 class RMSNorm(nn.Module):
@@ -14,8 +15,7 @@ class RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(d_model))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        variance = x.pow(2).mean(-1, keepdim=True)
-        return x * torch.rsqrt(variance + self.eps) * self.weight
+        return triton_rmsnorm(x, self.weight, self.eps)
 
 class GatedMLP(nn.Module):
     def __init__(self, d_model: int, ffn_dim: int):
@@ -54,24 +54,9 @@ class SelectiveSSM(nn.Module):
         delta_proj, b_proj, c_proj = torch.split(
             x_proj_out, [self.dt_rank, self.d_state, self.d_state], dim=-1
         )
-
-        delta = F.softplus(self.dt_proj(delta_proj)).float().unsqueeze(-1)
+        delta = F.softplus(self.dt_proj(delta_proj)).float()
         a_mat = -torch.exp(self.a_log.float()).view(1, d, self.d_state)
-        b_bar = b_proj.float().unsqueeze(2)
-        u_f = u.float().unsqueeze(-1)
-        c_proj_f = c_proj.float()
-
-        h = torch.zeros(b, d, self.d_state, device=u.device, dtype=torch.float32)
-        ys = []
-        for t in range(l):
-            d_t = delta[:, t]
-            da_t = torch.exp(d_t * a_mat)
-            dbu_t = (d_t * b_bar[:, t]) * u_f[:, t]
-            h = da_t * h + dbu_t
-            y_t = torch.einsum("bdn,bn->bd", h, c_proj_f[:, t])
-            ys.append(y_t)
-
-        y = torch.stack(ys, dim=1).to(u.dtype)
+        y = triton_selective_scan(u, delta, a_mat, b_proj, c_proj)
         y = y + u * self.d
         return y
 

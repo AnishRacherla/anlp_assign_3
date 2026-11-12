@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .triton_ops import triton_rmsnorm
 from .vocab import decode_target_sequence, NOISE_TARGET_ID
 
 class RMSNorm(nn.Module):
@@ -13,8 +14,7 @@ class RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(d_model))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        variance = x.pow(2).mean(-1, keepdim=True)
-        return x * torch.rsqrt(variance + self.eps) * self.weight
+        return triton_rmsnorm(x, self.weight, self.eps)
 
 class GatedMLP(nn.Module):
     def __init__(self, d_model: int, ffn_dim: int):
