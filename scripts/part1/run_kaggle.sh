@@ -15,7 +15,7 @@ ROLL_NUMBER="${ROLL_NUMBER:-2024101046}"
 EPOCHS="${EPOCHS:-3}"
 BATCH_SIZE="${BATCH_SIZE:-32}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-}"
+MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-50000}"
 
 if [ -f ".env" ]; then
     set -a
@@ -82,14 +82,41 @@ if [ -n "$HF_REPO_ID" ]; then
     HF_FLAG="--push-to-hf --hf-repo-id $HF_REPO_ID"
 fi
 
-echo "=== Launching Dual-GPU Parallel Pipelines (Hybrid on GPU 0, DeltaNet on GPU 1) ==="
+echo "=== Launching Dual-GPU Parallel Pipelines for All 4 Models ==="
 
 # ------------------------------------------------------------------------------
-# GPU 0 Pipeline: Hybrid (Mamba-DeltaNet)
+# GPU 0 Pipeline: Transformer -> Hybrid
 # ------------------------------------------------------------------------------
 (
     set -e
-    echo "[GPU 0] Starting Hybrid (Mamba-DeltaNet)..."
+    echo "[GPU 0] Starting Model 1: Transformer..."
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.train \
+        --model-type transformer \
+        --epochs "$EPOCHS" \
+        --batch-size "$BATCH_SIZE" \
+        --max-seq-len "$MAX_SEQ_LEN" \
+        --device cuda:0 \
+        --wandb-project "$WANDB_PROJECT" \
+        --wandb-run-name "transformer_gpu0" \
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu0_transformer.log 2>&1; then
+        echo "[GPU 0] ERROR: Transformer training failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_transformer.log
+        exit 1
+    fi
+
+    echo "[GPU 0] Transformer training complete. Evaluating..."
+    if ! CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
+        --model-type transformer \
+        --checkpoint-path models/part1/transformer_best.pt \
+        --roll-number "$ROLL_NUMBER" \
+        --device cuda:0 >> logs/part1/gpu0_transformer.log 2>&1; then
+        echo "[GPU 0] ERROR: Transformer evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu0_transformer.log
+        exit 1
+    fi
+    echo "[GPU 0] Transformer evaluated successfully."
+
+    echo "[GPU 0] Starting Model 2: Hybrid (Mamba-DeltaNet)..."
     if ! CUDA_VISIBLE_DEVICES=0 python -m src.train \
         --model-type hybrid \
         --epochs "$EPOCHS" \
@@ -115,15 +142,43 @@ echo "=== Launching Dual-GPU Parallel Pipelines (Hybrid on GPU 0, DeltaNet on GP
         exit 1
     fi
     echo "[GPU 0] Hybrid evaluated successfully!"
+    echo "[GPU 0] All assigned models finished successfully!"
 ) &
 PID_GPU0=$!
 
 # ------------------------------------------------------------------------------
-# GPU 1 Pipeline: DeltaNet
+# GPU 1 Pipeline: Mamba -> DeltaNet
 # ------------------------------------------------------------------------------
 (
     set -e
-    echo "[GPU 1] Starting DeltaNet..."
+    echo "[GPU 1] Starting Model 3: Mamba..."
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.train \
+        --model-type mamba \
+        --epochs "$EPOCHS" \
+        --batch-size "$BATCH_SIZE" \
+        --max-seq-len "$MAX_SEQ_LEN" \
+        --device cuda:0 \
+        --wandb-project "$WANDB_PROJECT" \
+        --wandb-run-name "mamba_gpu1" \
+        $HF_FLAG $SAMPLE_FLAG > logs/part1/gpu1_mamba.log 2>&1; then
+        echo "[GPU 1] ERROR: Mamba training failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_mamba.log
+        exit 1
+    fi
+
+    echo "[GPU 1] Mamba training complete. Evaluating..."
+    if ! CUDA_VISIBLE_DEVICES=1 python -m src.evaluate \
+        --model-type mamba \
+        --checkpoint-path models/part1/mamba_best.pt \
+        --roll-number "$ROLL_NUMBER" \
+        --device cuda:0 >> logs/part1/gpu1_mamba.log 2>&1; then
+        echo "[GPU 1] ERROR: Mamba evaluation failed! Recent log:"
+        tail -n 25 logs/part1/gpu1_mamba.log
+        exit 1
+    fi
+    echo "[GPU 1] Mamba evaluated successfully."
+
+    echo "[GPU 1] Starting Model 4: DeltaNet..."
     if ! CUDA_VISIBLE_DEVICES=1 python -m src.train \
         --model-type deltanet \
         --epochs "$EPOCHS" \
@@ -149,6 +204,7 @@ PID_GPU0=$!
         exit 1
     fi
     echo "[GPU 1] DeltaNet evaluated successfully!"
+    echo "[GPU 1] All assigned models finished successfully!"
 ) &
 PID_GPU1=$!
 

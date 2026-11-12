@@ -30,7 +30,7 @@ def main():
     max_seq_len = os.environ.get("MAX_SEQ_LEN", "512")
     wandb_proj = os.environ.get("WANDB_PROJECT", "anlp-a3-part1")
     hf_repo = os.environ.get("HF_REPO_ID", "")
-    max_samples = os.environ.get("MAX_TRAIN_SAMPLES", "")
+    max_samples = os.environ.get("MAX_TRAIN_SAMPLES", "50000")
 
     sample_flag = f"--max-train-samples {max_samples}" if max_samples else ""
     hf_flag = f"--push-to-hf --hf-repo-id {hf_repo}" if hf_repo else ""
@@ -41,6 +41,12 @@ def main():
     Path("results/part1").mkdir(parents=True, exist_ok=True)
 
     gpu0_cmd = (
+        f"CUDA_VISIBLE_DEVICES=0 python -m src.train --model-type transformer "
+        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name transformer_gpu0 "
+        f"{hf_flag} {sample_flag} && "
+        f"CUDA_VISIBLE_DEVICES=0 python -m src.evaluate --model-type transformer "
+        f"--checkpoint-path models/part1/transformer_best.pt --device cuda:0 && "
         f"CUDA_VISIBLE_DEVICES=0 python -m src.train --model-type hybrid "
         f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name hybrid_gpu0 "
@@ -51,6 +57,12 @@ def main():
 
     gpu1_device = "1" if gpu_count >= 2 else "0"
     gpu1_cmd = (
+        f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.train --model-type mamba "
+        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name mamba_gpu1 "
+        f"{hf_flag} {sample_flag} && "
+        f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.evaluate --model-type mamba "
+        f"--checkpoint-path models/part1/mamba_best.pt --device cuda:0 && "
         f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.train --model-type deltanet "
         f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name deltanet_gpu1 "
@@ -59,11 +71,11 @@ def main():
         f"--checkpoint-path models/part1/deltanet_best.pt --device cuda:0"
     )
 
-    print("Starting GPU 0: Hybrid (Mamba-DeltaNet)")
-    p0 = run_cmd(gpu0_cmd, Path("logs/part1/gpu0_hybrid.log"))
+    print("Starting GPU 0: Transformer -> Hybrid")
+    p0 = run_cmd(gpu0_cmd, Path("logs/part1/gpu0_pipeline.log"))
 
-    print(f"Starting GPU {gpu1_device}: DeltaNet")
-    p1 = run_cmd(gpu1_cmd, Path("logs/part1/gpu1_deltanet.log"))
+    print(f"Starting GPU {gpu1_device}: Mamba -> DeltaNet")
+    p1 = run_cmd(gpu1_cmd, Path("logs/part1/gpu1_pipeline.log"))
 
     p0.wait()
     p1.wait()
