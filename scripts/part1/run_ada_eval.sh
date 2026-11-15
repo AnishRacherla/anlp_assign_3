@@ -16,10 +16,12 @@ mkdir -p logs/part1 results/part1 output/part1
 echo "=== Hostname: $(hostname) ==="
 nvidia-smi || true
 
-if [ "$1" == "--all" ]; then
+MODEL="${1:-deltanet}"
+
+if [ "$MODEL" == "--all" ]; then
     echo "=== Running Full Evaluation on All 4 Models ==="
     bash scripts/part1/eval_all.sh
 else
-    echo "=== Running Official TA Evaluation (Hybrid) ==="
-    bash scripts/part1/test_assn.sh "$@"
+    echo "=== Running Evaluation for Model: $MODEL ==="
+    bash scripts/part1/test_assn.sh --model-type "$MODEL" --checkpoint-path "models/part1/${MODEL}_best.pt" "${@:2}"
 fi
