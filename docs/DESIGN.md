@@ -18,14 +18,15 @@
 ## 3. Proposed Architecture
 
 ```
-[Embedding]
-   -> (Mamba layer -> DeltaNet layer) x (N/2)
-   -> RMSNorm -> Linear head (28-way: 27 plaintext + noise)
+[Embedding (85 -> 192)]
+   -> (Mamba layer -> DeltaNet layer) x 4  [8 layers total]
+   -> RMSNorm -> Linear head (192 -> 28: 27 plaintext + noise)
 ```
 
+- Budget & Hyperparameters: $d_{\text{model}} = 192$, $N = 8$ layers (4 Mamba layers interleaved with 4 DeltaNet layers), Gated MLP hidden dimension $d_{\text{ffn}} = 768$ ($4 \times d_{\text{model}}$), Mamba state dimension $d_{\text{state}} = 16$, convolution width $k = 4$, DeltaNet heads $h = 4$ ($d_{\text{head}} = 48$). Total parameters: $\approx 4,732,960$ (~4.73M), strictly matched within 1% of pure Transformer (~4.74M), pure Mamba (~4.69M), and pure DeltaNet (~4.77M).
 - Every layer is pre-norm with a residual connection: `x <- x + Layer(RMSNorm(x))`.
-- Mamba layer: input projection, depthwise causal conv (k=4), selective SSM with input-dependent `Delta`, `B`, `C`, SiLU gate, output projection, followed by a gated MLP so the two layer types have the same feed-forward capacity.
-- DeltaNet layer: short causal conv with SiLU on q, k, v, L2-normalised q and k, `beta_t = sigmoid(.)`, delta-rule state `S_t = S_{t-1} + beta_t (v_t - S_{t-1} k_t) k_t^T`, `o_t = S_t q_t`, then a gated MLP.
+- Mamba layer: input projection, depthwise causal conv ($k=4$), selective SSM with input-dependent $\Delta$, $B$, $C$, SiLU gate, output projection, followed by a gated MLP so the two layer types have the same feed-forward capacity.
+- DeltaNet layer: short causal conv with SiLU on $q, k, v$, $L_2$-normalised $q$ and $k$, $\beta_t = \text{sigmoid}(\cdot)$, delta-rule state $S_t = S_{t-1} + \beta_t (v_t - S_{t-1} k_t) k_t^T$, $o_t = S_t q_t$, then a gated MLP.
 - Mamba comes first in each pair, and the first layer sees the raw noisy embeddings.
 
 ## 4. Hypotheses
