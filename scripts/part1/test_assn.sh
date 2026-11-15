@@ -18,7 +18,16 @@ fi
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if [ -d "$REPO_DIR/.venv" ]; then
-    VENV_NVIDIA_LIBS=$(find "$REPO_DIR/.venv" -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':')
+    if ! find "$REPO_DIR/.venv" -name "libcudnn.so.9" 2>/dev/null | grep -q .; then
+        echo "[test_assn.sh] Auto-installing missing nvidia-cudnn-cu12 library..."
+        if command -v uv >/dev/null 2>&1; then
+            uv pip install "nvidia-cudnn-cu12>=9.0" 2>/dev/null || true
+        elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
+            "$REPO_DIR/.venv/bin/pip" install "nvidia-cudnn-cu12>=9.0" 2>/dev/null || true
+        fi
+    fi
+
+    VENV_NVIDIA_LIBS=$(find "$REPO_DIR/.venv" -type d -name "lib" 2>/dev/null | grep -E "site-packages/nvidia|site-packages/torch" | tr '\n' ':')
     if [ -n "$VENV_NVIDIA_LIBS" ]; then
         export LD_LIBRARY_PATH="${VENV_NVIDIA_LIBS}${LD_LIBRARY_PATH}"
     fi
