@@ -55,7 +55,7 @@ def load_checkpoint(
     hf_filename: Optional[str] = None,
 ):
     ckpt_file = Path(checkpoint_path)
-    if (not ckpt_file.exists() or hf_repo_id) and hf_repo_id:
+    if not ckpt_file.exists() and hf_repo_id:
         try:
             filename = hf_filename or ckpt_file.name
             downloaded = pull_from_hub(repo_id=hf_repo_id, filename=filename)
