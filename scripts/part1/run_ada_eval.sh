@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+squeue -u anish.racherla
 #SBATCH --job-name=eval_part1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

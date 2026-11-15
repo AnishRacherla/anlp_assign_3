@@ -11,33 +11,10 @@
 
 set -e
 export PYTHONUNBUFFERED=1
-mkdir -p logs/part2
+mkdir -p logs/part2 output/part2 results/part2
 
 echo "=== Hostname: $(hostname) ==="
 nvidia-smi || true
 
-if ! command -v uv >/dev/null 2>&1; then
-    if [ -f "$HOME/.local/bin/uv" ]; then
-        export PATH="$HOME/.local/bin:$PATH"
-    elif [ -f "$HOME/.cargo/bin/uv" ]; then
-        export PATH="$HOME/.cargo/bin:$PATH"
-    fi
-fi
-
-echo "=== Syncing venv via uv sync ==="
-uv sync
-
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-fi
-
-VENV_NVIDIA_LIBS=$(find .venv -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':')
-if [ -n "$VENV_NVIDIA_LIBS" ]; then
-    export LD_LIBRARY_PATH="${VENV_NVIDIA_LIBS}${LD_LIBRARY_PATH}"
-fi
-
-echo "=== Verifying CUDA Compatibility ==="
-python -c "import torch; print('CUDA available:', torch.cuda.is_available(), 'Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
-
-echo "=== Running GNN Pipeline on GPU ==="
-python -m src.gnn_pipeline --epochs 100 --lr 0.005 --batch-size 64 --device cuda
+echo "=== Running Part 2 GNN Pipeline on GPU ==="
+bash scripts/part2/test_gnn.sh "$@"
