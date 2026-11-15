@@ -18,6 +18,11 @@ if [ -d ".venv" ]; then
     fi
 fi
 
+RUN_CMD="python"
+if command -v uv >/dev/null 2>&1; then
+    RUN_CMD="uv run python"
+fi
+
 mkdir -p results/part1 output/part1
 
 echo "========================================================================"
@@ -41,7 +46,7 @@ for m in "${MODELS[@]}"; do
         EXTRA_FLAGS+=(--hf-repo-id "$HF_REPO_ID")
     fi
 
-    python -m src.evaluate \
+    $RUN_CMD -m src.evaluate \
         --model-type "$m" \
         --split test \
         --roll-number "$ROLL_NUMBER" \
@@ -50,7 +55,7 @@ for m in "${MODELS[@]}"; do
     # Also generate held-out predictions
     if [ -d "data/part1/heldout" ]; then
         echo "Generating held-out decryption with $m..."
-        python -m src.evaluate \
+        $RUN_CMD -m src.evaluate \
             --model-type "$m" \
             --heldout \
             --roll-number "$ROLL_NUMBER" \
@@ -64,7 +69,7 @@ echo "=== ALL 4 EVALUATIONS COMPLETED ==="
 echo "========================================================================"
 echo ""
 
-python -c "
+$RUN_CMD -c "
 import json
 from pathlib import Path
 
