@@ -83,6 +83,41 @@ if [ -n "$HF_REPO_ID" ]; then
     HF_FLAG="--push-to-hf --hf-repo-id $HF_REPO_ID"
 fi
 
+TARGET_MODEL="${1:-deltanet}"
+
+if [ "$TARGET_MODEL" != "--all" ]; then
+    echo "=== Running Single Model Pipeline on Kaggle GPU: $TARGET_MODEL ==="
+    echo "Starting $TARGET_MODEL training..."
+    python -m src.train \
+        --model-type "$TARGET_MODEL" \
+        --epochs "$EPOCHS" \
+        --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
+        --max-seq-len "$MAX_SEQ_LEN" \
+        --device cuda \
+        --wandb-project "$WANDB_PROJECT" \
+        --wandb-run-name "${TARGET_MODEL}_kaggle" \
+        $HF_FLAG $SAMPLE_FLAG
+
+    echo "Evaluating $TARGET_MODEL..."
+    python -m src.evaluate \
+        --model-type "$TARGET_MODEL" \
+        --checkpoint-path "models/part1/${TARGET_MODEL}_best.pt" \
+        --roll-number "$ROLL_NUMBER" \
+        --device cuda
+
+    echo "Evaluating $TARGET_MODEL on heldout set..."
+    python -m src.evaluate \
+        --model-type "$TARGET_MODEL" \
+        --checkpoint-path "models/part1/${TARGET_MODEL}_best.pt" \
+        --roll-number "$ROLL_NUMBER" \
+        --heldout \
+        --device cuda
+
+    echo "=== $TARGET_MODEL finished successfully! ==="
+    exit 0
+fi
+
 echo "=== Launching Dual-GPU Parallel Pipelines for All 4 Models ==="
 
 # ------------------------------------------------------------------------------
