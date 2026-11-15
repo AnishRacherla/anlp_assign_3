@@ -3,13 +3,20 @@ set -e
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+if [[ "$(hostname 2>/dev/null)" =~ (ada|gnode) ]] || [ -d "/home2" ]; then
+    export http_proxy="${http_proxy:-http://proxy.iiit.ac.in:8080}"
+    export https_proxy="${https_proxy:-http://proxy.iiit.ac.in:8080}"
+    export HTTP_PROXY="${HTTP_PROXY:-http://proxy.iiit.ac.in:8080}"
+    export HTTPS_PROXY="${HTTPS_PROXY:-http://proxy.iiit.ac.in:8080}"
+fi
+
 if [ -d "$REPO_DIR/.venv" ]; then
     if ! find "$REPO_DIR/.venv" -name "libcudnn.so.9" 2>/dev/null | grep -q .; then
-        echo "[test_gnn.sh] Auto-installing missing nvidia-cudnn-cu12 library..."
+        echo "[test_gnn.sh] Installing missing nvidia-cudnn-cu12 into virtual environment..."
         if command -v uv >/dev/null 2>&1; then
-            uv pip install "nvidia-cudnn-cu12>=9.0" 2>/dev/null || true
+            uv pip install "nvidia-cudnn-cu12>=9.0" || true
         elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
-            "$REPO_DIR/.venv/bin/pip" install "nvidia-cudnn-cu12>=9.0" 2>/dev/null || true
+            "$REPO_DIR/.venv/bin/pip" install "nvidia-cudnn-cu12>=9.0" || true
         fi
     fi
 
