@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .triton_ops import triton_rmsnorm
-from .vocab import decode_target_sequence, NOISE_TARGET_ID
+from .vocab import decode_target_sequence, NOISE_TARGET_ID, NOISE_TOKEN_IDS
 
 class RMSNorm(nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5):
@@ -167,10 +167,11 @@ class Transformer(nn.Module):
                 if end == t:
                     break
             logits = logits_accum / counts.clamp(min=1.0)
-        pred_ids = logits.argmax(dim=-1).cpu().tolist()
+        pred_ids = logits[..., :27].argmax(dim=-1).cpu().tolist()
+        inp_ids = input_ids.cpu().tolist()
         results = []
         for i, row in enumerate(pred_ids):
             limit = lengths[i] if lengths is not None else len(row)
-            clean_row = [tid for tid in row[1:limit] if tid != NOISE_TARGET_ID]
+            clean_row = [row[j] for j in range(1, limit) if inp_ids[i][j] not in NOISE_TOKEN_IDS]
             results.append(decode_target_sequence(clean_row))
         return results

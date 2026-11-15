@@ -95,8 +95,8 @@ def train(
     max_seq_len: int = 512,
     batch_size: int = 32,
     epochs: int = 5,
-    lr: float = 3e-4,
-    warmup_steps: int = 500,
+    lr: float = 8e-4,
+    warmup_steps: int = 1000,
     grad_clip: float = 1.0,
     checkpoint_dir: str = "models/part1",
     wandb_project: Optional[str] = None,
@@ -254,8 +254,8 @@ def parse_args():
     p.add_argument("--max-seq-len", type=int, default=512)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--epochs", type=int, default=5)
-    p.add_argument("--lr", type=float, default=3e-4)
-    p.add_argument("--warmup-steps", type=int, default=500)
+    p.add_argument("--lr", type=float, default=8e-4)
+    p.add_argument("--warmup-steps", type=int, default=1000)
     p.add_argument("--checkpoint-dir", type=str, default="models/part1")
     p.add_argument("--wandb-project", type=str, default=None)
     p.add_argument("--wandb-run-name", type=str, default=None)

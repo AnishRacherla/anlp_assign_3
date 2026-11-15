@@ -14,6 +14,7 @@ SEP_ID = 3
 
 ALL_CHARS = " !'+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz{}"
 NOISE_CHARS = set("!'+,-./:;<=>?[]_{}")
+NOISE_TOKEN_IDS = {5, 6, 7, 8, 9, 10, 11, 22, 23, 24, 25, 26, 27, 54, 55, 56, 83, 84}
 PLAIN_CHARS = "abcdefghijklmnopqrstuvwxyz "
 
 NUM_TARGET_CLASSES = 28

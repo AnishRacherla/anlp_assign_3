@@ -12,10 +12,11 @@ GIT_BRANCH="${GIT_BRANCH:-main}"
 HF_REPO_ID="${HF_REPO_ID:-AnishRacherla/anlp-a3-models}"
 WANDB_PROJECT="${WANDB_PROJECT:-anlp-a3-part1}"
 ROLL_NUMBER="${ROLL_NUMBER:-2024101046}"
-EPOCHS="${EPOCHS:-3}"
+EPOCHS="${EPOCHS:-5}"
 BATCH_SIZE="${BATCH_SIZE:-32}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-50000}"
+MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-100000}"
+LR="${LR:-8e-4}"
 
 if [ -f ".env" ]; then
     set -a
@@ -94,6 +95,7 @@ echo "=== Launching Dual-GPU Parallel Pipelines for All 4 Models ==="
         --model-type transformer \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
         --max-seq-len "$MAX_SEQ_LEN" \
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
@@ -121,6 +123,7 @@ echo "=== Launching Dual-GPU Parallel Pipelines for All 4 Models ==="
         --model-type hybrid \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
         --max-seq-len "$MAX_SEQ_LEN" \
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
@@ -156,6 +159,7 @@ PID_GPU0=$!
         --model-type mamba \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
         --max-seq-len "$MAX_SEQ_LEN" \
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \
@@ -183,6 +187,7 @@ PID_GPU0=$!
         --model-type deltanet \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
         --max-seq-len "$MAX_SEQ_LEN" \
         --device cuda:0 \
         --wandb-project "$WANDB_PROJECT" \

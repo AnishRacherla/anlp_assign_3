@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from .deltanet import DeltaNetLayer
 from .mamba import MambaLayer, RMSNorm
-from .vocab import decode_target_sequence, NOISE_TARGET_ID
+from .vocab import decode_target_sequence, NOISE_TARGET_ID, NOISE_TOKEN_IDS
 
 class HybridMambaDeltaNet(nn.Module):
     def __init__(
@@ -64,10 +64,11 @@ class HybridMambaDeltaNet(nn.Module):
     def predict(self, input_ids: torch.Tensor, lengths: Optional[List[int]] = None) -> List[str]:
         self.eval()
         logits = self.forward(input_ids)
-        pred_ids = logits.argmax(dim=-1).cpu().tolist()
+        pred_ids = logits[..., :27].argmax(dim=-1).cpu().tolist()
+        inp_ids = input_ids.cpu().tolist()
         results = []
         for i, row in enumerate(pred_ids):
             limit = lengths[i] if lengths is not None else len(row)
-            clean_row = [tid for tid in row[1:limit] if tid != NOISE_TARGET_ID]
+            clean_row = [row[j] for j in range(1, limit) if inp_ids[i][j] not in NOISE_TOKEN_IDS]
             results.append(decode_target_sequence(clean_row))
         return results

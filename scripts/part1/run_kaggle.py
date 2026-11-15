@@ -25,12 +25,13 @@ def main():
         pass
     print(f"Detected {gpu_count} CUDA GPUs.")
 
-    epochs = os.environ.get("EPOCHS", "3")
+    epochs = os.environ.get("EPOCHS", "5")
+    lr = os.environ.get("LR", "8e-4")
     batch_size = os.environ.get("BATCH_SIZE", "32")
     max_seq_len = os.environ.get("MAX_SEQ_LEN", "512")
     wandb_proj = os.environ.get("WANDB_PROJECT", "anlp-a3-part1")
     hf_repo = os.environ.get("HF_REPO_ID", "")
-    max_samples = os.environ.get("MAX_TRAIN_SAMPLES", "50000")
+    max_samples = os.environ.get("MAX_TRAIN_SAMPLES", "100000")
 
     sample_flag = f"--max-train-samples {max_samples}" if max_samples else ""
     hf_flag = f"--push-to-hf --hf-repo-id {hf_repo}" if hf_repo else ""
@@ -42,13 +43,13 @@ def main():
 
     gpu0_cmd = (
         f"CUDA_VISIBLE_DEVICES=0 python -m src.train --model-type transformer "
-        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--epochs {epochs} --lr {lr} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name transformer_gpu0 "
         f"{hf_flag} {sample_flag} && "
         f"CUDA_VISIBLE_DEVICES=0 python -m src.evaluate --model-type transformer "
         f"--checkpoint-path models/part1/transformer_best.pt --device cuda:0 && "
         f"CUDA_VISIBLE_DEVICES=0 python -m src.train --model-type hybrid "
-        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--epochs {epochs} --lr {lr} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name hybrid_gpu0 "
         f"{hf_flag} {sample_flag} && "
         f"CUDA_VISIBLE_DEVICES=0 python -m src.evaluate --model-type hybrid "
@@ -58,13 +59,13 @@ def main():
     gpu1_device = "1" if gpu_count >= 2 else "0"
     gpu1_cmd = (
         f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.train --model-type mamba "
-        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--epochs {epochs} --lr {lr} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name mamba_gpu1 "
         f"{hf_flag} {sample_flag} && "
         f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.evaluate --model-type mamba "
         f"--checkpoint-path models/part1/mamba_best.pt --device cuda:0 && "
         f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.train --model-type deltanet "
-        f"--epochs {epochs} --batch-size {batch_size} --max-seq-len {max_seq_len} "
+        f"--epochs {epochs} --lr {lr} --batch-size {batch_size} --max-seq-len {max_seq_len} "
         f"--device cuda:0 --wandb-project {wandb_proj} --wandb-run-name deltanet_gpu1 "
         f"{hf_flag} {sample_flag} && "
         f"CUDA_VISIBLE_DEVICES={gpu1_device} python -m src.evaluate --model-type deltanet "
