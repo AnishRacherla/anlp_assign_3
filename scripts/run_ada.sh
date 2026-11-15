@@ -97,12 +97,13 @@ if [ ! -f "data/part1/train/cipher.jsonl" ]; then
     exit 1
 fi
 
-EPOCHS="${EPOCHS:-3}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
+EPOCHS="${EPOCHS:-5}"
+BATCH_SIZE="${BATCH_SIZE:-32}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-ROLL_NUMBER="${ROLL_NUMBER:-2024XXXXXX}"
+ROLL_NUMBER="${ROLL_NUMBER:-2024101046}"
+LR="${LR:-8e-4}"
 
-MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-25000}"
+MAX_TRAIN_SAMPLES="${MAX_TRAIN_SAMPLES:-100000}"
 EXTRA_FLAGS="--max-train-samples $MAX_TRAIN_SAMPLES"
 
 # Detect number of available GPUs
