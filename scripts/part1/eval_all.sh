@@ -24,9 +24,9 @@ if [ -d "$REPO_DIR/.venv" ]; then
     if ! find "$REPO_DIR/.venv" -name "libcudnn.so.9" 2>/dev/null | grep -q .; then
         echo "[eval_all.sh] Installing missing nvidia-cudnn-cu12 into virtual environment..."
         if command -v uv >/dev/null 2>&1; then
-            uv pip install "nvidia-cudnn-cu12>=9.0" || true
+            uv pip install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
         elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
-            "$REPO_DIR/.venv/bin/pip" install "nvidia-cudnn-cu12>=9.0" || true
+            "$REPO_DIR/.venv/bin/pip" install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
         fi
     fi
 
