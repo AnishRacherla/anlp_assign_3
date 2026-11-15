@@ -10,11 +10,14 @@ from typing import Dict, List, Optional, Tuple
 
 for _p in sys.path:
     if "site-packages" in _p:
-        for _so in Path(_p).glob("nvidia/*/lib/*.so*"):
-            try:
-                ctypes.CDLL(str(_so), mode=ctypes.RTLD_GLOBAL)
-            except Exception:
-                pass
+        for _pkg in ["cuda_runtime", "cuda_nvrtc", "cublas", "cudnn", "cufft", "curand", "cusolver", "cusparse", "nccl"]:
+            _lib_dir = Path(_p) / "nvidia" / _pkg / "lib"
+            if _lib_dir.is_dir():
+                for _so in sorted(_lib_dir.glob("*.so*")):
+                    try:
+                        ctypes.CDLL(str(_so), mode=ctypes.RTLD_GLOBAL)
+                    except Exception:
+                        pass
 
 import numpy as np
 import torch

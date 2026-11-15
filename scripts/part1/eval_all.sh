@@ -11,15 +11,19 @@ if [ -f ".env" ]; then
     set +a
 fi
 
-if [ -d ".venv" ]; then
-    VENV_NVIDIA_LIBS=$(find .venv -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':')
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+if [ -d "$REPO_DIR/.venv" ]; then
+    VENV_NVIDIA_LIBS=$(find "$REPO_DIR/.venv" -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':')
     if [ -n "$VENV_NVIDIA_LIBS" ]; then
         export LD_LIBRARY_PATH="${VENV_NVIDIA_LIBS}${LD_LIBRARY_PATH}"
     fi
 fi
 
 RUN_CMD="python"
-if command -v uv >/dev/null 2>&1; then
+if [ -f "$REPO_DIR/.venv/bin/python" ]; then
+    RUN_CMD="$REPO_DIR/.venv/bin/python"
+elif command -v uv >/dev/null 2>&1; then
     RUN_CMD="uv run python"
 fi
 
