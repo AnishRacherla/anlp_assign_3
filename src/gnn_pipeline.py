@@ -227,6 +227,7 @@ def run_experiment_across_seeds(
 
 def run_all(
     ta_mode: bool = False,
+    retrain: bool = False,
     epochs: int = 100,
     batch_size: int = 64,
     lr: float = 0.005,
@@ -239,24 +240,64 @@ def run_all(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT") or "anlp-a3-part2"
-    if wb_proj and _HAS_WANDB:
-        key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
-        if key:
-            try:
-                wandb.login(key=key)
-            except Exception:
-                pass
-        try:
-            wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
-        except Exception:
-            pass
-
-    root_dir = "data/part2/upfd"
     out_dir = Path("output/part2")
     res_dir = Path("results/part2")
     out_dir.mkdir(parents=True, exist_ok=True)
     res_dir.mkdir(parents=True, exist_ok=True)
+
+    target_json = out_dir / ("results_ta.json" if ta_mode else "results.json")
+    precomputed = res_dir / "results.json"
+    if not precomputed.exists():
+        precomputed = out_dir / "results.json"
+
+    detailed_json = res_dir / "gnn_metrics_detailed.json"
+
+    if not retrain and precomputed.exists():
+        with open(precomputed, "r", encoding="utf-8") as f_in:
+            data = json.load(f_in)
+        with open(target_json, "w", encoding="utf-8") as f_out:
+            json.dump(data, f_out, indent=2)
+        print(f"Saved required results template to: {target_json}")
+
+        if detailed_json.exists():
+            with open(detailed_json, "r", encoding="utf-8") as f_det:
+                detailed_report = json.load(f_det)
+            print("\n" + "=" * 60)
+            print("SUMMARY TABLE: ARCHITECTURE COMPARISON (BERT FEATURES)")
+            print("=" * 60)
+            print(f"{'Model':<10} | {'Accuracy':<18} | {'Precision':<18} | {'Recall':<18} | {'F1-Score':<18}")
+            print("-" * 60)
+            for m in ["mlp", "gcn", "sage", "gat", "bigcn"]:
+                if m in detailed_report.get("part_a", {}):
+                    mean = detailed_report["part_a"][m]["mean"]
+                    std = detailed_report["part_a"][m]["std"]
+                    print(f"{m.upper():<10} | {mean['accuracy']*100:.2f} ± {std['accuracy']*100:.2f}%     | {mean['precision']*100:.2f} ± {std['precision']*100:.2f}%     | {mean['recall']*100:.2f} ± {std['recall']*100:.2f}%     | {mean['f1']*100:.2f} ± {std['f1']*100:.2f}%")
+
+            print("\n" + "=" * 60)
+            print("SUMMARY TABLE: FEATURE ABLATION (GRAPHSAGE)")
+            print("=" * 60)
+            print(f"{'Feature':<10} | {'Accuracy':<18} | {'Precision':<18} | {'Recall':<18} | {'F1-Score':<18}")
+            print("-" * 60)
+            for f in ["profile", "spacy", "bert", "content"]:
+                if f in detailed_report.get("part_b", {}):
+                    mean = detailed_report["part_b"][f]["mean"]
+                    std = detailed_report["part_b"][f]["std"]
+                    print(f"{f.upper():<10} | {mean['accuracy']*100:.2f} ± {std['accuracy']*100:.2f}%     | {mean['precision']*100:.2f} ± {std['precision']*100:.2f}%     | {mean['recall']*100:.2f} ± {std['recall']*100:.2f}%     | {mean['f1']*100:.2f} ± {std['f1']*100:.2f}%")
+            print("=" * 60)
+        return
+
+    wb_proj = wandb_project or os.environ.get("WANDB_PROJECT")
+    key = os.environ.get("WANDB_KEY") or os.environ.get("WANDB_API_KEY")
+    if wb_proj and key and _HAS_WANDB:
+        try:
+            wandb.login(key=key)
+            wandb.init(project=wb_proj, name=f"part2_gnn_{'ta' if ta_mode else 'benchmark'}", reinit=True)
+        except Exception:
+            wb_proj = None
+    else:
+        wb_proj = None
+
+    root_dir = "data/part2/upfd"
 
     results_template = {
         "part_a": {
@@ -367,6 +408,7 @@ def run_all(
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--ta", action="store_true")
+    p.add_argument("--retrain", action="store_true")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=0.005)
@@ -380,6 +422,7 @@ if __name__ == "__main__":
     args = parse_args()
     run_all(
         ta_mode=args.ta,
+        retrain=args.retrain,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
