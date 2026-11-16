@@ -20,12 +20,12 @@ if [ -d "$REPO_DIR/.venv" ]; then
         fi
     fi
 
-    if ! find "$REPO_DIR/.venv" -name "libnccl.so.2" 2>/dev/null | grep -q .; then
+    if ! find "$REPO_DIR/.venv" -name "libnccl.so*" 2>/dev/null | grep -q .; then
         echo "[test_gnn.sh] Installing missing nvidia-nccl-cu12 into virtual environment..."
         if command -v uv >/dev/null 2>&1; then
-            uv pip install "nvidia-nccl-cu12" || true
+            uv pip install --reinstall "nvidia-nccl-cu12" || true
         elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
-            "$REPO_DIR/.venv/bin/pip" install "nvidia-nccl-cu12" || true
+            "$REPO_DIR/.venv/bin/pip" install --force-reinstall "nvidia-nccl-cu12" || true
         fi
     fi
 
@@ -34,7 +34,7 @@ if [ -d "$REPO_DIR/.venv" ]; then
         export LD_LIBRARY_PATH="${VENV_NVIDIA_LIBS}${LD_LIBRARY_PATH}"
     fi
 
-    NCCL_LIB=$(find "$REPO_DIR/.venv" -name "libnccl.so.2" 2>/dev/null | head -n 1)
+    NCCL_LIB=$(find "$REPO_DIR/.venv" -name "libnccl.so*" 2>/dev/null | grep -E "libnccl\.so(\.[0-9]+)*$" | head -n 1)
     if [ -n "$NCCL_LIB" ]; then
         export LD_PRELOAD="${NCCL_LIB}${LD_PRELOAD:+:${LD_PRELOAD}}"
     fi
