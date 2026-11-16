@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
+_ROOT = str(Path(__file__).resolve().parent.parent)
+if _ROOT not in sys.path or sys.path[0] != _ROOT:
+    sys.path.insert(0, _ROOT)
+
 for _p in sys.path:
     if "site-packages" in _p:
         for _pkg in ["cuda_runtime", "cuda_nvrtc", "cublas", "cudnn", "cufft", "curand", "cusolver", "cusparse", "nccl"]:

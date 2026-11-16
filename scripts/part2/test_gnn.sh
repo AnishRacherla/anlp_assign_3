@@ -5,6 +5,10 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 find "$REPO_DIR/src" -type f -name "*.pyc" -delete 2>/dev/null || true
 find "$REPO_DIR/src" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$REPO_DIR/.venv" -name "*editable*.pth" -delete 2>/dev/null || true
+find "$REPO_DIR/.venv" -name "*boilerplate*.pth" -delete 2>/dev/null || true
+
+export PYTHONPATH="$REPO_DIR"
 
 if [[ "$(hostname 2>/dev/null)" =~ (ada|gnode) ]] || [ -d "/home2" ]; then
     export http_proxy="${http_proxy:-http://proxy.iiit.ac.in:8080}"
