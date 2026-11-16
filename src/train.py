@@ -45,13 +45,14 @@ def get_model(
     n_layers: int = 8,
     max_seq_len: int = 512,
 ) -> nn.Module:
-    if model_type == "transformer":
+    m_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
+    if m_type == "transformer":
         return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "mamba":
+    elif m_type == "mamba":
         return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "deltanet":
+    elif m_type == "deltanet":
         return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "hybrid":
+    elif m_type == "hybrid":
         return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -247,7 +248,7 @@ def train(
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--model-type", type=str, default="transformer", choices=["transformer", "mamba", "deltanet", "hybrid"])
+    p.add_argument("--model", "--model-type", dest="model_type", type=str, default="combo", choices=["transformer", "mamba", "deltanet", "hybrid", "combo"])
     p.add_argument("--train-cipher", type=str, default="data/part1/train/cipher.jsonl")
     p.add_argument("--train-cleaned", type=str, default="data/part1/train/cleaned.jsonl")
     p.add_argument("--val-cipher", type=str, default="data/part1/validation/cipher.jsonl")

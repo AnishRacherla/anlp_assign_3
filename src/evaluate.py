@@ -38,13 +38,14 @@ def get_model(
     n_layers: int = 8,
     max_seq_len: int = 512,
 ) -> nn.Module:
-    if model_type == "transformer":
+    m_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
+    if m_type == "transformer":
         return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "mamba":
+    elif m_type == "mamba":
         return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "deltanet":
+    elif m_type == "deltanet":
         return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
-    elif model_type == "hybrid":
+    elif m_type == "hybrid":
         return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
     raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -100,8 +101,13 @@ def run_evaluation(
     device: Optional[str] = None,
     max_samples: Optional[int] = None,
 ) -> Dict[str, float]:
+    canonical_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
     if checkpoint_path is None:
-        checkpoint_path = f"models/part1/{model_type}_best.pt"
+        p1 = Path(f"models/part1/{canonical_type}_best.pt")
+        p2 = Path(f"models/part1/{model_type}_best.pt")
+        checkpoint_path = str(p1 if p1.exists() or not p2.exists() else p2)
+    if hf_filename is None and canonical_type == "hybrid":
+        hf_filename = "hybrid_best.pt"
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -215,7 +221,7 @@ def run_evaluation(
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--model-type", type=str, default="hybrid", choices=["transformer", "mamba", "deltanet", "hybrid"])
+    p.add_argument("--model", "--model-type", dest="model_type", type=str, default="combo", choices=["transformer", "mamba", "deltanet", "hybrid", "combo"])
     p.add_argument("--checkpoint-path", type=str, default=None)
     p.add_argument("--cipher-path", type=str, default="data/part1/test/cipher.jsonl")
     p.add_argument("--cleaned-path", type=str, default="data/part1/test/cleaned.jsonl")

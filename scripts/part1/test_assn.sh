@@ -8,8 +8,10 @@ EXTRA_ARGS=()
 if [ -n "$HF_REPO_ID" ]; then
     EXTRA_ARGS+=(--hf-repo-id "$HF_REPO_ID")
 fi
-if [ -n "$MODEL_TYPE" ]; then
-    EXTRA_ARGS+=(--model-type "$MODEL_TYPE")
+if [ -n "$MODEL" ]; then
+    EXTRA_ARGS+=(--model "$MODEL")
+elif [ -n "$MODEL_TYPE" ]; then
+    EXTRA_ARGS+=(--model "$MODEL_TYPE")
 fi
 if [ -n "$CHECKPOINT_PATH" ]; then
     EXTRA_ARGS+=(--checkpoint-path "$CHECKPOINT_PATH")

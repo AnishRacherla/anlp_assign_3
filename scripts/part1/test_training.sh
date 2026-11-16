@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-MODEL_TYPE="${MODEL_TYPE:-hybrid}"
+MODEL="${MODEL:-${MODEL_TYPE:-combo}}"
 EPOCHS="${EPOCHS:-5}"
 BATCH_SIZE="${BATCH_SIZE:-16}"
 LR="${LR:-8e-4}"
@@ -26,21 +26,21 @@ fi
 
 if [ -f "$REPO_DIR/.venv/bin/python" ]; then
     "$REPO_DIR/.venv/bin/python" -m src.train \
-        --model-type "$MODEL_TYPE" \
+        --model "$MODEL" \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
         --lr "$LR" \
         "$@"
 elif command -v uv >/dev/null 2>&1; then
     uv run python -m src.train \
-        --model-type "$MODEL_TYPE" \
+        --model "$MODEL" \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
         --lr "$LR" \
         "$@"
 else
     python -m src.train \
-        --model-type "$MODEL_TYPE" \
+        --model "$MODEL" \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
         --lr "$LR" \
