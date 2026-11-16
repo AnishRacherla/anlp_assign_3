@@ -45,8 +45,10 @@ class HybridMambaDeltaNet(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        for m in self.modules():
+        for name, m in self.named_modules():
             if isinstance(m, nn.Linear):
+                if "dt_proj" in name:
+                    continue
                 nn.init.normal_(m.weight, std=0.02)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)

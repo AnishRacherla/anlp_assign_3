@@ -69,7 +69,7 @@ fi
 
 echo "=== Installing Dependencies ==="
 pip install --quiet torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 || true
-pip install --quiet torch-geometric wandb huggingface-hub tqdm editdistance pyyaml scipy
+pip install --quiet torch-geometric wandb huggingface-hub tqdm editdistance pyyaml scipy rapidfuzz
 
 mkdir -p logs/part1 models/part1 output/part1 results/part1
 
@@ -179,6 +179,13 @@ echo "=== Launching Dual-GPU Parallel Pipelines for All 4 Models ==="
         tail -n 25 logs/part1/gpu0_hybrid.log
         exit 1
     fi
+    echo "[GPU 0] Evaluating Hybrid on heldout set..."
+    CUDA_VISIBLE_DEVICES=0 python -m src.evaluate \
+        --model-type hybrid \
+        --checkpoint-path models/part1/hybrid_best.pt \
+        --roll-number "$ROLL_NUMBER" \
+        --heldout \
+        --device cuda:0 >> logs/part1/gpu0_hybrid.log 2>&1 || true
     echo "[GPU 0] Hybrid evaluated successfully!"
     echo "[GPU 0] All assigned models finished successfully!"
 ) &
