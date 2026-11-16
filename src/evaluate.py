@@ -44,16 +44,17 @@ def get_model(
     max_seq_len: int = 512,
     d_ffn: Optional[int] = None,
     d_ffn_deltanet: Optional[int] = None,
+    n_heads: int = 4,
 ) -> nn.Module:
     m_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
     if m_type == "transformer":
-        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
+        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn, n_heads=n_heads)
     elif m_type == "mamba":
         return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     elif m_type == "deltanet":
-        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
+        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn, n_heads=n_heads)
     elif m_type == "hybrid":
-        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn, d_ffn_deltanet=d_ffn_deltanet)
+        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn, d_ffn_deltanet=d_ffn_deltanet, n_heads=n_heads)
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def load_checkpoint(
@@ -159,6 +160,15 @@ def run_evaluation(
     if "layers.1.mlp.fc2.weight" in state_dict:
         d_ffn_deltanet = state_dict["layers.1.mlp.fc2.weight"].shape[1]
 
+    n_heads = config.get("n_heads", None)
+    if n_heads is None:
+        for k in state_dict.keys():
+            if "beta_proj.weight" in k:
+                n_heads = state_dict[k].shape[0]
+                break
+    if n_heads is None:
+        n_heads = 4
+
     tokenizer = CharTokenizer()
     vocab_size = tokenizer.vocab_size
 
@@ -171,6 +181,7 @@ def run_evaluation(
         max_seq_len=max_seq_len,
         d_ffn=d_ffn,
         d_ffn_deltanet=d_ffn_deltanet,
+        n_heads=n_heads,
     )
     model.load_state_dict(state_dict)
     model.to(device)
@@ -228,6 +239,10 @@ def run_evaluation(
             for id_val, hyp in zip(ids, batch_preds):
                 f_out.write(json.dumps({"id": id_val, "text": hyp}, ensure_ascii=False) + "\n")
 
+    if not heldout:
+        import shutil
+        shutil.copyfile(out_filename, output_dir / f"{canonical_type}_{split}_decrypt.jsonl")
+
     print(f"Decrypted outputs saved to {out_filename}")
 
     metrics = {}
@@ -241,7 +256,7 @@ def run_evaluation(
         metrics["non_embedding_parameters"] = non_emb_p
         metrics["flops_per_sequence"] = flops
 
-        res_path = results_dir / f"{model_type}_{split}_metrics.json"
+        res_path = results_dir / f"{canonical_type}_{split}_metrics.json"
         with open(res_path, "w", encoding="utf-8") as f_res:
             json.dump(metrics, f_res, indent=2)
 

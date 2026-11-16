@@ -97,7 +97,7 @@ class Transformer(nn.Module):
         num_classes: int = 28,
         d_model: int = 192,
         n_layers: int = 8,
-        n_heads: int = 6,
+        n_heads: int = 4,
         max_seq_len: int = 512,
         dropout: float = 0.0,
         d_ffn: Optional[int] = None,

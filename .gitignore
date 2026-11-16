@@ -48,3 +48,6 @@ output/*
 scratch_*.py
 diagnose_cipher.py
 *.zip
+
+# Third-party reference code
+abhinav_src/

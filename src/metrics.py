@@ -118,6 +118,11 @@ def measure_flops_forward(model: nn.Module, sample_input: torch.Tensor) -> int:
     v = getattr(model, "num_classes", 28)
     return int(b * (2 * n * (12 * d * d) * l + 2 * l * d * v))
 
+def positional_matches(ref: str, hyp: str) -> Tuple[int, int]:
+    n = min(len(ref), len(hyp))
+    hits = sum(1 for i in range(n) if ref[i] == hyp[i])
+    return hits, max(len(ref), len(hyp))
+
 def evaluate_predictions(references: List[str], hypotheses: List[str]) -> Dict[str, float]:
     assert len(references) == len(hypotheses)
     n = len(references)
@@ -130,8 +135,17 @@ def evaluate_predictions(references: List[str], hypotheses: List[str]) -> Dict[s
     tot_rec = 0.0
     tot_f1 = 0.0
     tot_lev = 0.0
+    pooled_hits = 0
+    pooled_total = 0
+    space_hits = 0
+    ref_total = 0
 
     for ref, hyp in zip(references, hypotheses):
+        hits, total = positional_matches(ref, hyp)
+        pooled_hits += hits
+        pooled_total += total
+        space_hits += ref.count(" ")
+        ref_total += len(ref)
         tot_char_acc += char_accuracy_aligned(ref, hyp)
         tot_word_acc += word_accuracy_aligned(ref, hyp)
         p, r, f = sequence_precision_recall_f1(ref, hyp)
@@ -147,4 +161,6 @@ def evaluate_predictions(references: List[str], hypotheses: List[str]) -> Dict[s
         "recall": tot_rec / n,
         "f1": tot_f1 / n,
         "levenshtein_distance": tot_lev / n,
+        "positional_char_accuracy": pooled_hits / max(1, pooled_total),
+        "all_space_baseline": space_hits / max(1, ref_total),
     }

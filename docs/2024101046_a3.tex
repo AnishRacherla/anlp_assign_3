@@ -1,0 +1,200 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{mathptmx}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit}
+\usepackage[hidelinks]{hyperref}
+\usepackage[font={small},labelfont=bf,skip=6pt]{caption}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\setlist{itemsep=2pt,topsep=2pt,parsep=0pt,leftmargin=1.4em}
+\linespread{1.08}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.2}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\definecolor{mambac}{RGB}{214,234,248}
+\definecolor{deltac}{RGB}{252,228,214}
+\definecolor{otherc}{RGB}{235,235,235}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Advanced NLP Assignment 3}\\[4pt]
+{\large Cipher Decryption with Mamba and DeltaNet, and Fake-News Propagation Graphs}\\[6pt]
+Anish Racherla (2024101046)
+\end{center}
+
+\section{Part A: Learning the cipher}
+
+\subsection{Task setup and what the cipher looks like}
+
+Plaintext uses 27 symbols (a--z, space). The ciphertext uses 81 symbols, 18 of which are inserted noise punctuation (11.7\% of the cipher stream). Removing them gives a one-to-one alignment with the plaintext on train and validation. Every model is therefore a causal \emph{per-position tagger} over the raw cipher stream with 28 classes (27 characters plus noise); noise positions are dropped by token ID, so the output length equals the plaintext length and inference is one forward pass.
+
+We analysed the cipher on the first 150{,}000 training documents, and these findings frame all results below.
+\begin{itemize}
+\item The key depends on the plaintext prefix: among 136{,}097 documents of length $\ge 8$, equal 8-character plaintext prefixes always gave equal cipher prefixes (0 conflicts), and likewise for 30-character prefixes over 75{,}909 documents.
+\item Position 0 is a fixed substitution, but a lookup table on (position, cipher symbol) predicts validation plaintext with accuracy 1.00 at position 0, 0.71 at positions 1--2, 0.24 at positions 3--29 and 0.18 from position 30.
+\end{itemize}
+So decoding position $i$ requires a state that summarises the whole decrypted prefix. This is a stateful, sequential task, which is why Mamba and DeltaNet are natural candidates, and why a window from the middle of a document cannot be decoded.
+
+\subsection{Models and training}
+
+All four models are written from scratch in PyTorch (no \texttt{mamba.ssm}) and share $d_{\text{model}}{=}192$, 8 pre-norm RMSNorm residual layers, a gated MLP of width 768, dropout 0 and about 4.7M parameters.
+\begin{itemize}
+\item \textbf{Transformer:} causal multi-head attention with RoPE.
+\item \textbf{Mamba:} input projection, depthwise causal conv ($k{=}4$), selective SSM with input-dependent $\Delta,B,C$ ($d_{\text{state}}{=}16$), SiLU gate.
+\item \textbf{DeltaNet:} short causal conv and SiLU on $q,k,v$, $L_2$-normalised $q,k$, $\beta_t{=}\sigma(\cdot)$, update $S_t=S_{t-1}+\beta_t(v_t-S_{t-1}k_t)k_t^\top$, $o_t=S_tq_t$, with 4 heads ($d_{\text{head}}{=}48$).
+\item \textbf{Hybrid:} four repeats of (Mamba layer $\to$ DeltaNet layer), each followed by the gated MLP (Figure~\ref{fig:arch}).
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\resizebox{0.92\linewidth}{!}{%
+\begin{tikzpicture}[
+  node distance=5mm,
+  box/.style={draw,rounded corners=2pt,minimum height=9mm,align=center,font=\small,inner sep=4pt},
+  arr/.style={-{Stealth[length=2mm]},thick}]
+\node[box,fill=otherc] (emb) {Embedding\\$85\to192$};
+\node[box,fill=mambac,right=of emb] (mam) {Mamba\\+ gated MLP};
+\node[box,fill=deltac,right=of mam] (del) {DeltaNet\\+ gated MLP};
+\node[box,fill=otherc,right=14mm of del] (nrm) {RMSNorm};
+\node[box,fill=otherc,right=of nrm] (head) {Linear head\\$192\to28$};
+\draw[arr] (emb) -- (mam);
+\draw[arr] (mam) -- (del);
+\draw[arr] (del) -- (nrm);
+\draw[arr] (nrm) -- (head);
+\node[draw,dashed,rounded corners=3pt,fit=(mam)(del),inner sep=5pt,label={[font=\small]above:$\times 4$}] {};
+\end{tikzpicture}}
+\caption{Hybrid architecture: 8 layers, Mamba first in every pair.}
+\label{fig:arch}
+\end{figure}
+
+\textbf{Training.} AdamW ($\beta{=}(0.9,0.95)$, weight decay 0.01), warm-up then cosine decay to $0.1\times$ the peak rate ($8\times 10^{-4}$), batch size 32, 5 epochs, gradient clipping 1.0, mixed precision; the checkpoint with the best validation loss is kept.
+
+\textbf{Triton (bonus).} The selective scan and RMSNorm have Triton forward kernels used at inference on GPU. Training uses the PyTorch recurrence, so the kernels speed up evaluation but not training.
+
+\textbf{Metrics.} Character accuracy is $1-\mathrm{Lev}(p,\hat p)/\max(|p|,|\hat p|)$ and word accuracy is the same over words, both averaged \emph{per document}. Precision, recall and F1 use the longest-common-subsequence length over $|\hat p|$, $|p|$ and their harmonic mean (equal here because $|\hat p|=|p|$). Levenshtein distance is the per-document mean. We also report \emph{pooled positional accuracy}, the share of all characters predicted correctly, which long documents dominate. FLOPs use \texttt{FlopCounterMode} on 256 tokens; the Mamba scan is not counted, so its figure is a lower bound.
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Part A, test split (1318 documents), one run per model. The all-space baseline predicts a space everywhere.}
+\begin{tabular}{lccccc}
+\toprule
+ & Transf. & Mamba & DeltaNet & Hybrid & All-space \\
+\midrule
+Parameters (M) & 4.74 & 4.69 & 4.78 & 4.73 & -- \\
+GFLOPs / 256 tokens & 2.82 & 2.39 & 2.51 & 2.45 & -- \\
+\midrule
+Char. acc.\ (per doc) & 0.4531 & 0.4546 & 0.4528 & \textbf{0.4620} & 0.112 \\
+Word accuracy & 0.2871 & 0.2892 & 0.2857 & \textbf{0.2938} & 0 \\
+P $=$ R $=$ F1 & 0.4760 & 0.4768 & 0.4764 & \textbf{0.5094} & -- \\
+Levenshtein $\downarrow$ & 731.42 & 731.37 & 731.36 & \textbf{710.10} & 739.1 \\
+Positional acc.\ (pooled) & \multicolumn{4}{c}{\todo{run analyze\_predictions.py}} & 0.169 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Per-document character accuracy looks high (0.45--0.46) only because 54\% of test documents are shorter than 64 characters and are decoded well. Levenshtein distance, which long documents dominate, is within 1--4\% of the all-space baseline (739.1) for every model, so on long documents all four models behave almost like the baseline.
+
+\begin{table}[h]
+\centering
+\caption{Positional character accuracy by document length (test).}
+\begin{tabular}{lcccc}
+\toprule
+Length & $<$64 & 64--255 & 256--1023 & $\ge$1024 \\
+Documents & 708 & 24 & 167 & 419 \\
+\midrule
+All-space baseline & 0.082 & 0.168 & 0.168 & 0.170 \\
+Models & \multicolumn{4}{c}{\todo{one row per model from analyze\_predictions.py}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Analysis against the hypotheses in DESIGN.md}
+
+\begin{itemize}
+\item \textbf{Why all four models plateau.} The cipher analysis above explains it. A model can decode the opening characters, where the key is a function of one or two symbols, but must otherwise rebuild the whole plaintext prefix to know the key. All four models share the same near-baseline behaviour on long documents, which is what Levenshtein shows. \todo{state the by-position/length results once analyze\_predictions.py has run, and whether the models fall back to predicting spaces}
+\item \textbf{H3 (hybrid at least as good as the best pure model): numerically supported, weakly.} The hybrid leads every metric, by 0.7--0.9 points of per-document character accuracy and 21 Levenshtein points over the other models. It is the only model clearly below the baseline distance (710 vs.\ 739). One run per model and no seeds, so the margin is suggestive only.
+\item \textbf{H2 (DeltaNet stores cipher-to-plaintext bindings): not supported.} The delta rule suits a fixed substitution table. The lookup-table result shows the cipher is a fixed table only at position 0 and the key then depends on the prefix, so a static key--value memory is the wrong abstraction.
+\item \textbf{H4 (Transformer most sensitive to noise): not supported at the training noise rate.} The Transformer is indistinguishable from the recurrent models. \todo{noise-rate sweep results (scripts/part1/noise\_sweep.py): accuracy at 0, 6, 12, 24 and 40\% inserted noise per model, and whether H4 or H1 changes}
+\item \textbf{Not run.} The layer-order ablation (Mamba$\to$DeltaNet vs.\ reverse) and the noise-stripped input ablation from the plan were not run; only the M$\to$D order was trained, so the order claim in H3 is untested.
+\item \textbf{Efficiency.} FLOPs per 256 tokens are 11--15\% lower for the recurrent models than for the Transformer (the Mamba figure is a lower bound), and the gap widens with length because attention cost is quadratic. Peak inference memory remains strictly within the 10\,GB VRAM limit across all architectures.
+\end{itemize}
+
+\section{Part B: News propagation graphs (UPFD GossipCop)}
+
+\subsection{Method}
+
+Fixed 20/10/70 split. Every model is a two-layer GNN (hidden size 64, dropout 0.5) with mean pooling and a linear classifier, with message passing implemented from scratch. GAT uses 2 heads; Bi-GCN has top-down and bottom-up branches with root-feature concatenation and DropEdge 0.2; the root-only MLP uses node 0 alone. Features are standardised with training statistics. Training uses Adam (lr $5{\times}10^{-3}$, weight decay $10^{-3}$) for 100 epochs with batch size 64 and gradient clipping 1.0, over five seeds (42, 1337, 2024, 7, 99). Test metrics come from the epoch with the best validation F1. Entries are mean $\pm$ standard deviation over seeds, in \%.
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Architecture comparison with BERT features. Best mean per column in bold.}
+\begin{tabular}{lcccc}
+\toprule
+Model & Accuracy & Precision & Recall & F1 \\
+\midrule
+Root-only MLP & 72.70$\pm$0.40 & 72.90$\pm$1.64 & 72.55$\pm$2.71 & 72.67$\pm$0.61 \\
+GCN & 95.41$\pm$0.39 & 95.59$\pm$0.75 & 95.23$\pm$1.35 & 95.40$\pm$0.43 \\
+GraphSAGE & 94.61$\pm$0.18 & 94.59$\pm$1.18 & 94.67$\pm$1.21 & 94.62$\pm$0.17 \\
+GAT & \textbf{96.51}$\pm$0.62 & \textbf{96.60}$\pm$0.23 & 96.43$\pm$1.08 & \textbf{96.51}$\pm$0.64 \\
+Bi-GCN & 95.91$\pm$0.69 & 95.43$\pm$1.17 & \textbf{96.46}$\pm$0.68 & 95.94$\pm$0.67 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Feature ablation with a fixed GraphSAGE backbone. Best mean per column in bold.}
+\begin{tabular}{lcccc}
+\toprule
+Features & Accuracy & Precision & Recall & F1 \\
+\midrule
+Profile & 95.18$\pm$0.54 & 95.30$\pm$0.50 & 95.06$\pm$1.18 & 95.17$\pm$0.56 \\
+SpaCy & 94.30$\pm$0.48 & 94.30$\pm$1.43 & 94.36$\pm$1.79 & 94.31$\pm$0.51 \\
+BERT & 94.61$\pm$0.18 & 94.59$\pm$1.18 & 94.67$\pm$1.21 & 94.62$\pm$0.17 \\
+Content & \textbf{96.62}$\pm$0.18 & \textbf{96.89}$\pm$0.78 & \textbf{96.36}$\pm$0.81 & \textbf{96.62}$\pm$0.18 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Analysis}
+
+\textbf{The propagation graph helps a lot.} Every graph model beats the text-only baseline by 22--24 points of accuracy, far beyond seed variance. The source text alone carries limited signal, while who interacted with a story and how it spread separates fake from real news much better.
+
+\textbf{GAT is best, but the top three are close.} GAT has the highest mean, followed by Bi-GCN, GCN and GraphSAGE. The gaps among GAT, Bi-GCN and GCN (0.5--1.1 points) are about one standard deviation, so we do not claim a reliable ordering among them. GraphSAGE is the weakest graph model, 0.8--1.9 points below the others. Attention may let GAT weight informative retweeters, and Bi-GCN models both propagation directions, but neither explanation was isolated by an ablation.
+
+\textbf{Features.} Content, which fuses user metadata with text, is best (96.62\%). The 10-dimensional profile features alone (95.18\%) beat both the 768-dimensional BERT vectors (94.61\%) and the 300-dimensional SpaCy vectors (94.30\%), so user behaviour carries more signal than the text representation and the two are complementary. The profile--BERT gap of 0.6 points is about one standard deviation, so that comparison is tentative; content beating each single feature set is better supported.
+
+\section*{Links}
+Models: \url{https://huggingface.co/AnishRacherla/anlp-a3-models}\\
+WandB: \url{https://forge.coreweave.com/wandb/racherlaanish-iiit-hyderabad/anlp-a3-part1}
+
+\begin{thebibliography}{9}
+\small
+\bibitem{mamba} A.~Gu and T.~Dao. Mamba: Linear-time sequence modeling with selective state spaces. 2023.
+\bibitem{deltanet} S.~Yang et al. Parallelizing linear transformers with the delta rule over sequence length. 2024.
+\bibitem{bert} J.~Devlin et al. BERT: Pre-training of deep bidirectional transformers for language understanding. NAACL 2019.
+\bibitem{gcn} T.~Kipf and M.~Welling. Semi-supervised classification with graph convolutional networks. ICLR 2017.
+\bibitem{sage} W.~Hamilton et al. Inductive representation learning on large graphs. NeurIPS 2017.
+\bibitem{gat} P.~Veli\v{c}kovi\'{c} et al. Graph attention networks. ICLR 2018.
+\bibitem{bigcn} T.~Bian et al. Rumor detection on social media with bi-directional graph convolutional networks. AAAI 2020.
+\bibitem{upfd} Y.~Dou et al. User preference-aware fake news detection. SIGIR 2021.
+\end{thebibliography}
+
+\end{document}

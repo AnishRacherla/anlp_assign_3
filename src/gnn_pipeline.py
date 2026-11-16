@@ -409,6 +409,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--ta", action="store_true")
     p.add_argument("--retrain", action="store_true")
+    p.add_argument("--use-cached", action="store_true")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=0.005)
@@ -422,7 +423,7 @@ if __name__ == "__main__":
     args = parse_args()
     run_all(
         ta_mode=args.ta,
-        retrain=args.retrain,
+        retrain=not args.use_cached,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,

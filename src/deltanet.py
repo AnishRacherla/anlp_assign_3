@@ -27,7 +27,7 @@ class GatedMLP(nn.Module):
         return self.fc2(F.silu(x1) * x2)
 
 class DeltaRuleLinearAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int = 6, d_head: Optional[int] = None, d_conv: int = 4):
+    def __init__(self, d_model: int, n_heads: int = 4, d_head: Optional[int] = None, d_conv: int = 4):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
@@ -96,7 +96,7 @@ class DeltaRuleLinearAttention(nn.Module):
         return self.out_proj(out)
 
 class DeltaNetLayer(nn.Module):
-    def __init__(self, d_model: int, n_heads: int = 6, d_head: Optional[int] = None, d_conv: int = 4, dropout: float = 0.0, d_ffn: Optional[int] = None):
+    def __init__(self, d_model: int, n_heads: int = 4, d_head: Optional[int] = None, d_conv: int = 4, dropout: float = 0.0, d_ffn: Optional[int] = None):
         super().__init__()
         self.norm1 = RMSNorm(d_model)
         self.block = DeltaRuleLinearAttention(d_model, n_heads=n_heads, d_head=d_head, d_conv=d_conv)
@@ -116,7 +116,7 @@ class DeltaNet(nn.Module):
         num_classes: int = 28,
         d_model: int = 192,
         n_layers: int = 8,
-        n_heads: int = 6,
+        n_heads: int = 4,
         d_head: Optional[int] = None,
         d_conv: int = 4,
         max_seq_len: int = 512,

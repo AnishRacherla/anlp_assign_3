@@ -101,7 +101,7 @@ All four architectures are constructed under a matched parameter budget:
 - **Optimizer:** `torch.optim.AdamW` with $\beta = (0.9, 0.95)$ and weight decay $= 0.01$.
 - **Learning Rate Schedule:** Cosine decay with 500 warmup steps down to $0.1 \times \text{LR}$.
 - **Gradient Clipping:** Max norm $1.0$ to prevent recurrent gradient explosions.
-- **Random Sequence Crops:** During training, sequences longer than `max_seq_len` (512) are randomly cropped ($[s : s + 512]$), ensuring diverse temporal coverage and eliminating length bias.
+- **Prefix Truncation:** During training, sequences longer than `max_seq_len` are truncated to their first `max_seq_len` symbols (document prefix, `input_ids[:max_len]`). The cipher key depends on the plaintext prefix, so a window taken from the middle of a document cannot be decoded. Inference runs on the full sequence.
 
 ---
 
