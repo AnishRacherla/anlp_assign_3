@@ -125,8 +125,21 @@ def run_evaluation(
         hf_filename=hf_filename,
     )
 
-    d_model = config.get("d_model", d_model)
-    n_layers = config.get("n_layers", n_layers)
+    d_model = config.get("d_model", None)
+    if d_model is None and "token_emb.weight" in state_dict:
+        d_model = state_dict["token_emb.weight"].shape[1]
+    if d_model is None:
+        d_model = 192
+
+    n_layers = config.get("n_layers", None)
+    if n_layers is None:
+        layer_indices = set()
+        for k in state_dict.keys():
+            parts = k.split(".")
+            if len(parts) > 1 and parts[0] in ("layers", "blocks") and parts[1].isdigit():
+                layer_indices.add(int(parts[1]))
+        n_layers = len(layer_indices) if layer_indices else 8
+
     max_seq_len = config.get("max_seq_len", max_seq_len)
     model_type = config.get("model_type", model_type)
     d_ffn = config.get("d_ffn", None)
