@@ -81,7 +81,7 @@ def evaluate_loss(model: nn.Module, loader, device: str) -> float:
         labels = labels.to(device)
         logits = model(inputs)
         b, t, v = logits.shape
-        loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=PAD_TARGET_ID, reduction="sum")
+        loss = F.cross_entropy(logits.reshape(-1, v), labels.reshape(-1), ignore_index=PAD_TARGET_ID, reduction="sum")
         n_tokens = (labels != PAD_TARGET_ID).sum().item()
         total_loss += loss.item()
         total_tokens += max(1, n_tokens)
@@ -193,7 +193,7 @@ def train(
             with torch.autocast(device_type=dev_type, enabled=is_cuda):
                 logits = model(inputs)
                 b, t, v = logits.shape
-                loss = F.cross_entropy(logits.view(-1, v), labels.view(-1), ignore_index=PAD_TARGET_ID)
+                loss = F.cross_entropy(logits.reshape(-1, v), labels.reshape(-1), ignore_index=PAD_TARGET_ID)
 
             cur_lr = lr * lr_schedule(step, warmup_steps, total_steps)
             for pg in optimizer.param_groups:

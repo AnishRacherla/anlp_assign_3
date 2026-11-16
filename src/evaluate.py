@@ -37,16 +37,17 @@ def get_model(
     d_model: int = 192,
     n_layers: int = 8,
     max_seq_len: int = 512,
+    d_ffn: Optional[int] = None,
 ) -> nn.Module:
     m_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
     if m_type == "transformer":
-        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Transformer(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     elif m_type == "mamba":
-        return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return Mamba(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     elif m_type == "deltanet":
-        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     elif m_type == "hybrid":
-        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len)
+        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def load_checkpoint(
@@ -125,6 +126,12 @@ def run_evaluation(
     n_layers = config.get("n_layers", n_layers)
     max_seq_len = config.get("max_seq_len", max_seq_len)
     model_type = config.get("model_type", model_type)
+    d_ffn = config.get("d_ffn", None)
+    if d_ffn is None:
+        for k in ["layers.0.mlp.fc2.weight", "blocks.0.mlp.fc2.weight"]:
+            if k in state_dict:
+                d_ffn = state_dict[k].shape[1]
+                break
 
     tokenizer = CharTokenizer()
     vocab_size = tokenizer.vocab_size
@@ -136,6 +143,7 @@ def run_evaluation(
         d_model=d_model,
         n_layers=n_layers,
         max_seq_len=max_seq_len,
+        d_ffn=d_ffn,
     )
     model.load_state_dict(state_dict)
     model.to(device)

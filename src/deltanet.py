@@ -96,12 +96,13 @@ class DeltaRuleLinearAttention(nn.Module):
         return self.out_proj(out)
 
 class DeltaNetLayer(nn.Module):
-    def __init__(self, d_model: int, n_heads: int = 6, d_head: Optional[int] = None, d_conv: int = 4, dropout: float = 0.0):
+    def __init__(self, d_model: int, n_heads: int = 6, d_head: Optional[int] = None, d_conv: int = 4, dropout: float = 0.0, d_ffn: Optional[int] = None):
         super().__init__()
         self.norm1 = RMSNorm(d_model)
         self.block = DeltaRuleLinearAttention(d_model, n_heads=n_heads, d_head=d_head, d_conv=d_conv)
         self.norm2 = RMSNorm(d_model)
-        self.mlp = GatedMLP(d_model, 4 * d_model)
+        hidden_mlp = d_ffn if d_ffn is not None else 4 * d_model
+        self.mlp = GatedMLP(d_model, hidden_mlp)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.block(self.norm1(x))
@@ -120,6 +121,7 @@ class DeltaNet(nn.Module):
         d_conv: int = 4,
         max_seq_len: int = 512,
         dropout: float = 0.0,
+        d_ffn: Optional[int] = None,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -130,7 +132,7 @@ class DeltaNet(nn.Module):
 
         self.token_emb = nn.Embedding(vocab_size, d_model)
         self.layers = nn.ModuleList([
-            DeltaNetLayer(d_model, n_heads=n_heads, d_head=d_head, d_conv=d_conv, dropout=dropout)
+            DeltaNetLayer(d_model, n_heads=n_heads, d_head=d_head, d_conv=d_conv, dropout=dropout, d_ffn=d_ffn)
             for _ in range(n_layers)
         ])
         self.norm_final = RMSNorm(d_model)
