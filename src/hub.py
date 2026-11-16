@@ -15,6 +15,12 @@ except ImportError:
     _HAS_HF = False
 
 def load_env(env_path: str = ".env"):
+    import socket
+    hn = socket.gethostname() if hasattr(socket, "gethostname") else ""
+    if "ada" in hn or "gnode" in hn or Path("/home2").is_dir():
+        for k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
+            if k not in os.environ:
+                os.environ[k] = "http://proxy.iiit.ac.in:8080"
     p = Path(env_path)
     if not p.exists():
         p = Path(__file__).resolve().parent.parent / ".env"

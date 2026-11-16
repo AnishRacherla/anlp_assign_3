@@ -60,7 +60,10 @@ def load_checkpoint(
     if not ckpt_file.exists() and hf_repo_id:
         try:
             filename = hf_filename or ckpt_file.name
-            downloaded = pull_from_hub(repo_id=hf_repo_id, filename=filename)
+            target_dir = str(ckpt_file.parent)
+            Path(target_dir).mkdir(parents=True, exist_ok=True)
+            print(f"Checkpoint not found locally. Pulling {filename} from Hugging Face ({hf_repo_id})...")
+            downloaded = pull_from_hub(repo_id=hf_repo_id, filename=filename, local_dir=target_dir)
             ckpt_file = Path(downloaded)
         except Exception as e:
             if not ckpt_file.exists():
@@ -107,8 +110,8 @@ def run_evaluation(
         p1 = Path(f"models/part1/{canonical_type}_best.pt")
         p2 = Path(f"models/part1/{model_type}_best.pt")
         checkpoint_path = str(p1 if p1.exists() or not p2.exists() else p2)
-    if hf_filename is None and canonical_type == "hybrid":
-        hf_filename = "hybrid_best.pt"
+    if hf_filename is None:
+        hf_filename = f"{canonical_type}_best.pt"
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
