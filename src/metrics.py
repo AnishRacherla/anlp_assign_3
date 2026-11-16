@@ -11,6 +11,29 @@ try:
 except ImportError:
     _HAS_EDITDISTANCE = False
 
+try:
+    from rapidfuzz.distance import LCSseq
+    _HAS_RAPIDFUZZ = True
+except ImportError:
+    _HAS_RAPIDFUZZ = False
+
+def compute_lcs_length(s1: str, s2: str) -> int:
+    if _HAS_RAPIDFUZZ:
+        return int(LCSseq.similarity(s1, s2))
+    m, n = len(s1), len(s2)
+    dp = [0] * (n + 1)
+    for i in range(1, m + 1):
+        prev = 0
+        c1 = s1[i - 1]
+        for j in range(1, n + 1):
+            temp = dp[j]
+            if c1 == s2[j - 1]:
+                dp[j] = prev + 1
+            else:
+                dp[j] = max(dp[j], dp[j - 1])
+            prev = temp
+    return dp[n]
+
 def compute_levenshtein(s1: str, s2: str) -> int:
     if _HAS_EDITDISTANCE:
         return editdistance.eval(s1, s2)
@@ -65,8 +88,7 @@ def sequence_precision_recall_f1(ref: str, hyp: str) -> Tuple[float, float, floa
         return 1.0, 1.0, 1.0
     if l_ref == 0 or l_hyp == 0:
         return 0.0, 0.0, 0.0
-    lev = compute_levenshtein(ref, hyp)
-    matches = max(0.0, (l_ref + l_hyp - lev) / 2.0)
+    matches = compute_lcs_length(ref, hyp)
     precision = matches / l_hyp
     recall = matches / l_ref
     f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0

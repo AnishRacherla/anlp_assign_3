@@ -86,7 +86,7 @@ if HAS_TRITON:
             tl.store(out_ptr + b_idx * stride_outb + t * stride_outl + d_idx * stride_outd, y_curr)
 
 def triton_rmsnorm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
-    if not HAS_TRITON or not x.is_cuda:
+    if not HAS_TRITON or not x.is_cuda or torch.is_grad_enabled():
         var = x.pow(2).mean(-1, keepdim=True)
         return x * torch.rsqrt(var + eps) * weight
     x_flat = x.view(-1, x.shape[-1]).contiguous()
@@ -115,7 +115,7 @@ def triton_selective_scan(
 ) -> torch.Tensor:
     b, l, d = u.shape
     d_state = b_proj.shape[-1]
-    if not HAS_TRITON or not u.is_cuda or d_state != 16:
+    if not HAS_TRITON or not u.is_cuda or d_state != 16 or torch.is_grad_enabled():
         a_m = a_mat.view(1, d, d_state)
         b_bar = b_proj.float().unsqueeze(2)
         u_f = u.float().unsqueeze(-1)

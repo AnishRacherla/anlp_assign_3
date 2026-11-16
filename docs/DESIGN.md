@@ -9,8 +9,8 @@
 
 ## 2. Formulation Shared by All Four Models
 
-- Input: `[BOS] c_1 ... c_L` (raw cipher including noise). Target at each position: the plaintext character, or `<noise>`. Loss is cross-entropy over all positions; padding is ignored.
-- Output: predictions at non-noise positions in order, which are already aligned with the plaintext. No autoregressive decoding, so inference is a single forward pass.
+- Input: `[BOS] c_1 ... c_L` (raw cipher including noise).
+- Output: The 18 synthetic noise punctuation symbols (`!'+,-./:;<=>?[]_{}`) are filtered deterministically by input token ID during decoding, and predictions at the remaining positions are restricted to the 27 plaintext characters (`a-z`, space). Because non-noise positions are filtered by token ID, the output sequence length matches the true plaintext length by construction. No autoregressive decoding, so inference is a single forward pass.
 - All models are causal, so recurrent models keep their intended form and the Transformer uses the same mask.
 - Matched budget: the same embedding, depth, hidden width target and MLP size, with parameter counts reported and kept within about 10% of each other. Dropout is 0 for all.
 - Training uses random crops of the sequences. Inference runs on full sequences for the recurrent models and with overlapping windows for the Transformer.
