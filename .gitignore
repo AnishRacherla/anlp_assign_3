@@ -13,9 +13,19 @@ wheels/
 # Environment files
 .env
 
-# Datasets (preserve .gitkeep)
+# Datasets (preserve .gitkeep and test/heldout data; ignore 1GB+ train)
 data/*
 !data/**/.gitkeep
+data/part1/train/
+data/part2/
+!data/part1/
+!data/part1/test/
+!data/part1/test/**
+!data/part1/heldout/
+!data/part1/heldout/**
+!data/part1/validation/
+!data/part1/validation/**
+!data/part1/details.md
 
 # Checkpoints and models (preserve .gitkeep)
 models/*
