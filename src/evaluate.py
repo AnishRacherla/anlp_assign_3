@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 _ROOT = str(Path(__file__).resolve().parent.parent)
 if _ROOT not in sys.path or sys.path[0] != _ROOT:
     sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
 
 for _p in sys.path:
     if "site-packages" in _p:
