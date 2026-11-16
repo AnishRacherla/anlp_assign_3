@@ -123,9 +123,9 @@ This complementary pipeline prevents representation degradation over extended co
 \subsection{Evaluation of Hypotheses against DESIGN.md}
 
 \begin{itemize}
-\item \textbf{Hypothesis H3 (Hybrid Synergy is Superior): Strongly Supported.} As hypothesised in \texttt{DESIGN.md}, interleaving Mamba layers with DeltaNet layers outperforms both pure constituents and the Transformer baseline across every single quantitative metric (0.5094 F1 vs. 0.4760, and 710.10 Levenshtein vs. 731.42). Preceding DeltaNet with Mamba allows the selective state space to absorb noise-driven token shifts before DeltaNet forms associative key-value bindings.
+\item \textbf{Hypothesis H1 (Hybrid Synergy is Superior): Strongly Supported.} As hypothesised in \texttt{DESIGN.md}, interleaving Mamba layers with DeltaNet layers outperforms both pure constituents and the Transformer baseline across every single quantitative metric (0.5094 F1 vs. 0.4760, and 710.10 Levenshtein vs. 731.42). Preceding DeltaNet with Mamba allows the selective state space to absorb noise-driven token shifts before DeltaNet forms associative key-value bindings.
 \item \textbf{Hypothesis H2 (DeltaNet Associative Memory): Validated in the Hybrid Framework.} While standalone DeltaNet experiences representation drift when processing uncleaned noisy cipher streams, pairing DeltaNet with Mamba's input-dependent selection enables effective associative retrieval of dynamic character bindings without state divergence.
-\item \textbf{Hypothesis H4 (Efficiency and Linear Scaling): Supported.} Pure Mamba and Hybrid achieve 11--15\% fewer FLOPs per sequence compared to the quadratic Transformer, with memory footprint remaining constant across linear sequence lengths, confirming the hypothesis that linear-time sequence models offer superior scaling for sequential cipher decryption tasks.
+\item \textbf{Hypothesis H3 (Efficiency and Linear Scaling): Supported.} Pure Mamba and Hybrid achieve 11--15\% fewer FLOPs per sequence compared to the quadratic Transformer, with memory footprint remaining constant across linear sequence lengths, confirming the hypothesis that linear-time sequence models offer superior scaling for sequential cipher decryption tasks.
 \end{itemize}
 
 \section{Part B: News propagation graphs (UPFD GossipCop)}

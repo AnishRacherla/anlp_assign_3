@@ -1,10 +1,10 @@
 {
-  "character_accuracy": 0.08404612161197708,
-  "word_accuracy": 0.0010692495909887189,
-  "precision": 0.5422348222920153,
-  "recall": 0.5408249272637723,
-  "f1": 0.5415269442572597,
-  "levenshtein_distance": 414.4,
+  "character_accuracy": 0.4546,
+  "word_accuracy": 0.2892,
+  "precision": 0.4768,
+  "recall": 0.4768,
+  "f1": 0.4768,
+  "levenshtein_distance": 731.3687,
   "total_parameters": 4691328,
   "non_embedding_parameters": 4675008,
   "flops_per_sequence": 2387214336
