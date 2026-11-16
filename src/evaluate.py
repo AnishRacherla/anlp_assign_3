@@ -42,6 +42,7 @@ def get_model(
     n_layers: int = 8,
     max_seq_len: int = 512,
     d_ffn: Optional[int] = None,
+    d_ffn_deltanet: Optional[int] = None,
 ) -> nn.Module:
     m_type = "hybrid" if model_type.lower() in ("combo", "hybrid") else model_type.lower()
     if m_type == "transformer":
@@ -51,7 +52,7 @@ def get_model(
     elif m_type == "deltanet":
         return DeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
     elif m_type == "hybrid":
-        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn)
+        return HybridMambaDeltaNet(vocab_size=vocab_size, num_classes=num_classes, d_model=d_model, n_layers=n_layers, max_seq_len=max_seq_len, d_ffn=d_ffn, d_ffn_deltanet=d_ffn_deltanet)
     raise ValueError(f"Unknown model_type: {model_type}")
 
 def load_checkpoint(
@@ -153,6 +154,10 @@ def run_evaluation(
                 d_ffn = state_dict[k].shape[1]
                 break
 
+    d_ffn_deltanet = None
+    if "layers.1.mlp.fc2.weight" in state_dict:
+        d_ffn_deltanet = state_dict["layers.1.mlp.fc2.weight"].shape[1]
+
     tokenizer = CharTokenizer()
     vocab_size = tokenizer.vocab_size
 
@@ -164,6 +169,7 @@ def run_evaluation(
         n_layers=n_layers,
         max_seq_len=max_seq_len,
         d_ffn=d_ffn,
+        d_ffn_deltanet=d_ffn_deltanet,
     )
     model.load_state_dict(state_dict)
     model.to(device)

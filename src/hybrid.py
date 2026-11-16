@@ -21,6 +21,7 @@ class HybridMambaDeltaNet(nn.Module):
         max_seq_len: int = 512,
         dropout: float = 0.0,
         d_ffn: Optional[int] = None,
+        d_ffn_deltanet: Optional[int] = None,
     ):
         super().__init__()
         assert n_layers % 2 == 0
@@ -30,14 +31,17 @@ class HybridMambaDeltaNet(nn.Module):
         self.n_layers = n_layers
         self.max_seq_len = max_seq_len
 
+        m_ffn = d_ffn
+        d_ffn_d = d_ffn_deltanet if d_ffn_deltanet is not None else d_ffn
+
         self.token_emb = nn.Embedding(vocab_size, d_model)
         self.layers = nn.ModuleList()
         for _ in range(n_layers // 2):
             self.layers.append(
-                MambaLayer(d_model, d_state=d_state, expand=expand, d_conv=d_conv, dropout=dropout, d_ffn=d_ffn)
+                MambaLayer(d_model, d_state=d_state, expand=expand, d_conv=d_conv, dropout=dropout, d_ffn=m_ffn)
             )
             self.layers.append(
-                DeltaNetLayer(d_model, n_heads=n_heads, d_conv=d_conv, dropout=dropout, d_ffn=d_ffn)
+                DeltaNetLayer(d_model, n_heads=n_heads, d_conv=d_conv, dropout=dropout, d_ffn=d_ffn_d)
             )
 
         self.norm_final = RMSNorm(d_model)
