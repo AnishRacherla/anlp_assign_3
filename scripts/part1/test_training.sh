@@ -31,6 +31,12 @@ fi
 if [ -d "$REPO_DIR/.venv" ]; then
     SEARCH_DIRS+=("$REPO_DIR/.venv")
 fi
+if [ -d "$REPO_DIR/../.venv" ]; then
+    SEARCH_DIRS+=("$REPO_DIR/../.venv")
+fi
+if [ -d "$HOME/anlp_assign_3/.venv" ]; then
+    SEARCH_DIRS+=("$HOME/anlp_assign_3/.venv")
+fi
 SYS_PREFIX="$(python3 -c 'import sys; print(sys.prefix)' 2>/dev/null || true)"
 if [ -n "$SYS_PREFIX" ] && [ -d "$SYS_PREFIX" ]; then
     SEARCH_DIRS+=("$SYS_PREFIX")
@@ -45,37 +51,9 @@ for sdir in "${SEARCH_DIRS[@]}"; do
     if [ -z "$FOUND_NCCL" ]; then
         FOUND_NCCL=$(find "$sdir" -name "libnccl.so*" 2>/dev/null | grep -E "libnccl\.so(\.[0-9]+)*$" | head -n 1)
     fi
-done
-
-if [ -z "$FOUND_CUDNN" ]; then
-    echo "[test_training.sh] Installing missing nvidia-cudnn-cu12..."
-    if command -v uv >/dev/null 2>&1; then
-        uv pip install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
-    elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
-        "$REPO_DIR/.venv/bin/pip" install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
-    elif command -v pip >/dev/null 2>&1; then
-        pip install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
-    fi
-fi
-
-if [ -z "$FOUND_NCCL" ]; then
-    echo "[test_training.sh] Installing missing nvidia-nccl-cu12..."
-    if command -v uv >/dev/null 2>&1; then
-        uv pip install --reinstall "nvidia-nccl-cu12" || true
-    elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
-        "$REPO_DIR/.venv/bin/pip" install --force-reinstall "nvidia-nccl-cu12" || true
-    elif command -v pip >/dev/null 2>&1; then
-        pip install --force-reinstall "nvidia-nccl-cu12" || true
-    fi
-fi
-
-for sdir in "${SEARCH_DIRS[@]}"; do
     VENV_NVIDIA_LIBS=$(find "$sdir" -type d -name "lib" 2>/dev/null | grep -E "site-packages/nvidia|site-packages/torch" | tr '\n' ':')
     if [ -n "$VENV_NVIDIA_LIBS" ]; then
         export LD_LIBRARY_PATH="${VENV_NVIDIA_LIBS}${LD_LIBRARY_PATH}"
-    fi
-    if [ -z "$FOUND_NCCL" ]; then
-        FOUND_NCCL=$(find "$sdir" -name "libnccl.so*" 2>/dev/null | grep -E "libnccl\.so(\.[0-9]+)*$" | head -n 1)
     fi
 done
 
@@ -83,8 +61,59 @@ if [ -n "$FOUND_NCCL" ]; then
     export LD_PRELOAD="${FOUND_NCCL}${LD_PRELOAD:+:${LD_PRELOAD}}"
 fi
 
+PYTHON_EXEC=""
+if [ -f "$REPO_DIR/.venv/bin/python" ]; then
+    PYTHON_EXEC="$REPO_DIR/.venv/bin/python"
+elif [ -f "$REPO_DIR/../.venv/bin/python" ]; then
+    PYTHON_EXEC="$REPO_DIR/../.venv/bin/python"
+elif [ -f "$HOME/anlp_assign_3/.venv/bin/python" ]; then
+    PYTHON_EXEC="$HOME/anlp_assign_3/.venv/bin/python"
+elif command -v uv >/dev/null 2>&1; then
+    PYTHON_EXEC="uv run python"
+else
+    PYTHON_EXEC="python3"
+fi
+
+if ! $PYTHON_EXEC -c "import torch" >/dev/null 2>&1; then
+    if [ -z "$FOUND_CUDNN" ]; then
+        echo "[test_training.sh] Installing missing nvidia-cudnn-cu12..."
+        if command -v uv >/dev/null 2>&1; then
+            uv pip install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
+        elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
+            "$REPO_DIR/.venv/bin/pip" install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
+        elif command -v pip >/dev/null 2>&1; then
+            pip install --upgrade "nvidia-cudnn-cu12>=9.1.0" || true
+        fi
+    fi
+
+    if [ -z "$FOUND_NCCL" ]; then
+        echo "[test_training.sh] Installing missing nvidia-nccl-cu12..."
+        if command -v uv >/dev/null 2>&1; then
+            uv pip install --reinstall "nvidia-nccl-cu12" || true
+        elif [ -f "$REPO_DIR/.venv/bin/pip" ]; then
+            "$REPO_DIR/.venv/bin/pip" install --force-reinstall "nvidia-nccl-cu12" || true
+        elif command -v pip >/dev/null 2>&1; then
+            pip install --force-reinstall "nvidia-nccl-cu12" || true
+        fi
+    fi
+fi
+
 if [ -f "$REPO_DIR/.venv/bin/python" ]; then
     "$REPO_DIR/.venv/bin/python" -m src.train \
+        --model "$MODEL" \
+        --epochs "$EPOCHS" \
+        --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
+        "$@"
+elif [ -f "$REPO_DIR/../.venv/bin/python" ]; then
+    "$REPO_DIR/../.venv/bin/python" -m src.train \
+        --model "$MODEL" \
+        --epochs "$EPOCHS" \
+        --batch-size "$BATCH_SIZE" \
+        --lr "$LR" \
+        "$@"
+elif [ -f "$HOME/anlp_assign_3/.venv/bin/python" ]; then
+    "$HOME/anlp_assign_3/.venv/bin/python" -m src.train \
         --model "$MODEL" \
         --epochs "$EPOCHS" \
         --batch-size "$BATCH_SIZE" \
