@@ -16,8 +16,21 @@ except ImportError:
 
 def load_env(env_path: str = ".env"):
     import socket
-    hn = socket.gethostname() if hasattr(socket, "gethostname") else ""
-    if "ada" in hn or "gnode" in hn or Path("/home2").is_dir():
+    def _reachable(host):
+        try:
+            socket.create_connection((host, 443), timeout=5).close()
+            return True
+        except OSError:
+            return False
+
+    def _resolves(host):
+        try:
+            socket.gethostbyname(host)
+            return True
+        except OSError:
+            return False
+
+    if not _reachable("huggingface.co") and _resolves("proxy.iiit.ac.in"):
         for k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
             if k not in os.environ:
                 os.environ[k] = "http://proxy.iiit.ac.in:8080"

@@ -13,7 +13,7 @@ fi
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-if [[ "$(hostname 2>/dev/null)" =~ (ada|gnode) ]] || [ -d "/home2" ]; then
+if ! curl -s -m 5 -o /dev/null https://huggingface.co 2>/dev/null && getent hosts proxy.iiit.ac.in >/dev/null 2>&1; then
     export http_proxy="${http_proxy:-http://proxy.iiit.ac.in:8080}"
     export https_proxy="${https_proxy:-http://proxy.iiit.ac.in:8080}"
     export HTTP_PROXY="${HTTP_PROXY:-http://proxy.iiit.ac.in:8080}"
